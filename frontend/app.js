@@ -9,7 +9,7 @@ const API_URL = (function() {
     return "http://localhost:3001";
   }
   // Render Backend URL – hier nach Deploy anpassen:
-  return "https://sentinel-backend.onrender.com";
+  return "https://senitel-backend.onrender.com";
 })();
 
 const REFRESH_INTERVAL = {
