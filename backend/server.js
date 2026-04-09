@@ -145,10 +145,8 @@ async function fetchFlights() {
   try {
     const res = await axios.get("https://opensky-network.org/api/states/all", {
       timeout: 10000,
-      params: {
-        // Begrenze auf relevante Regionen um API-Load zu reduzieren
-        lamin: 10, lamax: 70, lomin: -20, lomax: 80,
-      },
+      // No bounding box = global, all aircraft in the air
+      timeout: 15000,
     });
 
     if (!res.data?.states) return;
@@ -156,24 +154,28 @@ async function fetchFlights() {
     flights.clear();
     let count = 0;
     for (const f of res.data.states) {
-      if (count > 800) break; // Limit für Performance
+      if (count > 2000) break; // Increased limit
       if (!f[6] || !f[5]) continue;
-      if (f[8] === true) continue; // On Ground überspringen
+      if (f[8] === true) continue; // Skip on-ground
+
+      const alt = f[7] ? Math.round(f[7] * 3.281) : 0; // m → ft
+      const spd = f[9] ? Math.round(f[9] * 1.944) : 0; // m/s → kn
 
       flights.set(f[0], {
         icao24: f[0],
         callsign: (f[1] || "").trim() || "UNKNOWN",
         lat: f[6],
         lon: f[5],
-        altitude: f[7] ? Math.round(f[7]) : 0,
-        speed: f[9] ? Math.round(f[9] * 1.944) : 0, // m/s → knoten
+        altitude: alt,
+        speed: spd,
         heading: f[10] ? Math.round(f[10]) : 0,
         country: f[2] || "Unknown",
+        onGround: false,
         timestamp: Date.now(),
       });
       count++;
     }
-    console.log(`[OpenSky] ${flights.size} Flugzeuge geladen`);
+    console.log(`[OpenSky] ${flights.size} aircraft loaded globally`);
   } catch (err) {
     if (err.response?.status === 429) {
       console.warn("[OpenSky] Rate limit – warte 60s");
@@ -187,11 +189,18 @@ async function fetchFlights() {
 
 function loadDemoFlights() {
   const demoFlights = [
-    { icao24: "a1", callsign: "JAKE21", lat: 48.5, lon: 37.5, altitude: 10668, speed: 420, heading: 180, country: "United States" },
-    { icao24: "a2", callsign: "COBRA1", lat: 33.5, lon: 36.2, altitude: 8534, speed: 580, heading: 270, country: "Israel" },
-    { icao24: "a3", callsign: "RRR7701", lat: 51.5, lon: 0.1, altitude: 11582, speed: 460, heading: 90, country: "United Kingdom" },
-    { icao24: "a4", callsign: "NATO01", lat: 50.1, lon: 14.4, altitude: 9144, speed: 440, heading: 120, country: "Belgium" },
-    { icao24: "a5", callsign: "RECON22", lat: 35.0, lon: 32.5, altitude: 12192, speed: 480, heading: 45, country: "United States" },
+    { icao24:"a1",callsign:"JAKE21",lat:48.5,lon:37.5,altitude:35000,speed:420,heading:180,country:"United States" },
+    { icao24:"a2",callsign:"COBRA1",lat:33.5,lon:36.2,altitude:28000,speed:580,heading:270,country:"Israel" },
+    { icao24:"a3",callsign:"RRR7701",lat:51.5,lon:0.1,altitude:38000,speed:460,heading:90,country:"United Kingdom" },
+    { icao24:"a4",callsign:"NATO01",lat:50.1,lon:14.4,altitude:30000,speed:440,heading:120,country:"Belgium" },
+    { icao24:"a5",callsign:"RECON22",lat:35.0,lon:32.5,altitude:40000,speed:480,heading:45,country:"United States" },
+    { icao24:"a6",callsign:"UAE001",lat:25.2,lon:55.4,altitude:36000,speed:500,heading:60,country:"United Arab Emirates" },
+    { icao24:"a7",callsign:"AIR001",lat:48.8,lon:2.3,altitude:35000,speed:470,heading:270,country:"France" },
+    { icao24:"a8",callsign:"DLH101",lat:52.5,lon:13.4,altitude:33000,speed:450,heading:180,country:"Germany" },
+    { icao24:"a9",callsign:"BAW202",lat:55.8,lon:-4.3,altitude:37000,speed:490,heading:200,country:"United Kingdom" },
+    { icao24:"a10",callsign:"RYR500",lat:41.9,lon:12.5,altitude:34000,speed:460,heading:100,country:"Ireland" },
+    { icao24:"a11",callsign:"KLM303",lat:52.3,lon:4.9,altitude:36000,speed:470,heading:320,country:"Netherlands" },
+    { icao24:"a12",callsign:"FORTE10",lat:38.8,lon:-77.0,altitude:38000,speed:520,heading:90,country:"United States" },
   ];
   demoFlights.forEach(f => flights.set(f.icao24, { ...f, timestamp: Date.now() }));
 }
