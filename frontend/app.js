@@ -5,7 +5,7 @@
 const API_URL = (function() {
   const h = window.location.hostname;
   if (h === "localhost" || h === "127.0.0.1") return "http://localhost:3001";
-  return "https://sentinel-backend.onrender.com"; // ← change after deploy
+  return "https://senitel-backend.onrender.com"; // ← change after deploy
 })();
 
 const REFRESH = { feed: 30000, vessels: 15000, events: 20000 };
