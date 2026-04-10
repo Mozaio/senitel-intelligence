@@ -63,7 +63,7 @@ let aisSocket = null;
 let aisReconnectTimer = null;
 
 function connectAIS() {
-  if (!process.env.AIS_API_KEY || process.env.AIS_API_KEY === "b22e06db2f43896bc45007f245db790c93a5b2f9") {
+  if (!process.env.AIS_API_KEY || process.env.AIS_API_KEY === "dein_aisstream_api_key_hier") {
     console.log("[AIS] Kein API Key – nutze Demo-Daten");
     loadDemoShips();
     return;
@@ -301,6 +301,32 @@ function buildEvents() {
 }
 
 // ─── API ROUTES ────────────────────────────────────────────────────────────
+
+
+// Translation Proxy - avoids browser CORS issues
+app.post("/translate", async (req, res) => {
+  const { text, from = "auto" } = req.body || {};
+  if (!text || typeof text !== "string") return res.json({ translation: "" });
+  const snippet = text.slice(0, 500);
+  // Try multiple source languages when auto
+  const pairs = from === "auto"
+    ? ["ru|en","ar|en","uk|en","de|en","fr|en","es|en","zh|en","fa|en","he|en"]
+    : [`${from}|en`];
+  for (const pair of pairs) {
+    try {
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(snippet)}&langpair=${pair}`;
+      const r = await axios.get(url, { timeout: 5000 });
+      const d = r.data;
+      if (d?.responseStatus === 200 && d.responseData?.translatedText) {
+        const t = d.responseData.translatedText;
+        if (t && t !== snippet && t.length > 5) {
+          return res.json({ translation: t, pair });
+        }
+      }
+    } catch(_) {}
+  }
+  res.json({ translation: text, fallback: true });
+});
 
 // Health Check
 app.get("/", (req, res) => {
