@@ -3,63 +3,54 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Sentinel – Live Intelligence</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230a0c0f'/><circle cx='16' cy='16' r='8' fill='none' stroke='%2300d4aa' stroke-width='2'/><circle cx='16' cy='16' r='3' fill='%2300d4aa'/></svg>"/>
-
+  <title>Sentinel – Global Intelligence</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230a0c0f'/><circle cx='16' cy='16' r='7' fill='none' stroke='%2300d4aa' stroke-width='2'/><circle cx='16' cy='16' r='3' fill='%2300d4aa'/><line x1='16' y1='2' x2='16' y2='8' stroke='%2300d4aa' stroke-width='1.5'/><line x1='16' y1='24' x2='16' y2='30' stroke='%2300d4aa' stroke-width='1.5'/><line x1='2' y1='16' x2='8' y2='16' stroke='%2300d4aa' stroke-width='1.5'/><line x1='24' y1='16' x2='30' y2='16' stroke='%2300d4aa' stroke-width='1.5'/></svg>"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Syne:wght@700;800&display=swap"/>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
 
+<!-- HEADER -->
 <header id="header">
   <div class="logo">SENTINEL<span class="logo-sub">.IO</span></div>
 
-  <nav class="header-filters">
-    <button class="filter-toggle active" data-layer="ships">
-      <span class="dot dot-blue"></span> Ships <span class="filter-count" id="count-ships">—</span>
-    </button>
-    <button class="filter-toggle active" data-layer="flights">
-      <span class="dot dot-teal"></span> Aircraft <span class="filter-count" id="count-flights">—</span>
-    </button>
-    <button class="filter-toggle active" data-layer="events">
-      <span class="dot dot-red pulse"></span> Events <span class="filter-count" id="count-events">—</span>
-    </button>
-    <button class="filter-toggle active" id="toggle-zones" style="border-color:rgba(255,170,0,0.3)">
-      <span class="dot dot-amber"></span> Conflict Zones
-    </button>
-  </nav>
+  <div class="header-toggles">
+    <button class="h-btn active" data-layer="ships"><span class="dot blue"></span>Ships<span class="cnt" id="cnt-ships">—</span></button>
+    <button class="h-btn active" data-layer="flights"><span class="dot teal"></span>Aircraft<span class="cnt" id="cnt-flights">—</span></button>
+    <button class="h-btn active" data-layer="events"><span class="dot red blink"></span>Events<span class="cnt" id="cnt-events">—</span></button>
+    <button class="h-btn active" id="btn-zones"><span class="dot amber"></span>Zones</button>
+  </div>
 
   <div class="header-right">
-    <!-- TRANSLATE BUTTON -->
-    <button id="translate-btn" class="translate-btn" title="Translate feed to English">
-      🌐 Translate <span class="tgl-off">OFF</span>
+    <button id="btn-translate" class="translate-btn">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      Translate to EN
+      <span class="tgl" id="tgl-label">OFF</span>
     </button>
-
-    <div class="header-status">
-      <div class="status-indicator" id="status-dot"></div>
-      <span id="status-text" class="status-text">Connecting...</span>
-      <span class="last-update" id="last-update"></span>
+    <div class="hstatus">
+      <div class="sdot" id="sdot"></div>
+      <span id="stxt">Connecting...</span>
+      <span class="lupd" id="lupd"></span>
     </div>
   </div>
 </header>
 
-<div id="app">
-  <div id="map-wrap">
+<!-- LAYOUT -->
+<div id="root">
+  <div id="mapwrap">
     <div id="map"></div>
-
-    <!-- Map scale legend -->
-    <div id="map-legend">
-      <div class="legend-row"><span class="leg-sq" style="background:#0e9eff;border-radius:50%"></span>Warship</div>
-      <div class="legend-row"><span class="leg-sq" style="background:#5599dd;border-radius:50%"></span>Cargo / Other</div>
-      <div class="legend-row"><span class="leg-sq" style="background:#00d4aa;transform:rotate(45deg)"></span>Aircraft</div>
-      <div class="legend-row"><span class="leg-sq" style="background:#ff7700;transform:rotate(45deg)"></span>Military flight</div>
-      <div class="legend-row"><span class="leg-sq" style="background:#ff2222;border-radius:50%"></span>Critical event</div>
-      <div class="legend-row"><span class="leg-sq" style="background:#ff5500;border-radius:50%"></span>High event</div>
-      <div class="legend-row"><span class="leg-sq" style="background:#ffaa00;border-radius:50%"></span>Elevated event</div>
+    <div id="legend">
+      <div class="leg-title">MAP KEY</div>
+      <div class="leg-row"><span class="leg-dot" style="background:#0e9eff"></span>Warship</div>
+      <div class="leg-row"><span class="leg-dot" style="background:#4488bb"></span>Vessel</div>
+      <div class="leg-row"><span class="leg-dot" style="background:#ff7700;border-radius:2px;transform:rotate(45deg)"></span>Military flight</div>
+      <div class="leg-row"><span class="leg-dot" style="background:#00d4aa;border-radius:2px;transform:rotate(45deg)"></span>Civil flight</div>
+      <div class="leg-row"><span class="leg-dot" style="background:#ff2222;animation:blink 1.5s infinite"></span>Critical event</div>
+      <div class="leg-row"><span class="leg-dot" style="background:#ff6600"></span>High event</div>
+      <div class="leg-row"><span class="leg-dot" style="background:#ffaa00"></span>Elevated event</div>
     </div>
   </div>
 
@@ -67,73 +58,53 @@
     <div class="tabs">
       <button class="tab active" data-tab="feed">Feed</button>
       <button class="tab" data-tab="vessels">Vessels</button>
-      <button class="tab" data-tab="intel">AI Intel</button>
+      <button class="tab" data-tab="intel">Intel</button>
       <button class="tab" data-tab="community">Community</button>
     </div>
 
     <!-- FEED -->
-    <div class="tab-panel active" id="panel-feed">
-      <div class="trust-notice">
-        <span>⚠</span>
-        Unverified sources may contain misinformation. Always cross-reference.
+    <div class="panel active" id="panel-feed">
+      <div class="warn-bar">⚠ Unverified sources may contain misinformation. Always cross-reference.</div>
+      <div class="feed-bar">
+        <button class="ff active" data-trust="all">All</button>
+        <button class="ff" data-trust="verified">✓ Verified</button>
+        <button class="ff" data-trust="unverified">~ Unverified</button>
+        <button class="ff" data-trust="propaganda">⚑ Propaganda</button>
       </div>
-      <div class="feed-filters">
-        <button class="feed-filter active" data-trust="all">All</button>
-        <button class="feed-filter" data-trust="verified">✓ Verified</button>
-        <button class="feed-filter" data-trust="unverified">~ Unverified</button>
-        <button class="feed-filter" data-trust="propaganda">⚑ Propaganda</button>
-      </div>
-      <div id="feed-list" class="feed-list">
-        <div class="loading-msg">Loading news...</div>
-      </div>
+      <div id="feed" class="feed-list"><div class="empty">Loading news...</div></div>
     </div>
 
     <!-- VESSELS -->
-    <div class="tab-panel" id="panel-vessels">
-      <div class="vessels-search">
-        <input type="text" id="vessel-search" placeholder="Search vessel / callsign..." autocomplete="off"/>
-      </div>
-      <div class="vessels-section-label">Ships</div>
-      <div id="ships-list" class="vessel-list"><div class="loading-msg">Loading ships...</div></div>
-      <div class="vessels-section-label" style="margin-top:6px">Aircraft</div>
-      <div id="flights-list" class="vessel-list"><div class="loading-msg">Loading aircraft...</div></div>
+    <div class="panel" id="panel-vessels">
+      <div class="vsearch"><input id="vsearch" type="text" placeholder="Search vessel / callsign..." autocomplete="off"/></div>
+      <div class="vsec-label">SHIPS</div>
+      <div id="vships" class="vlist"><div class="empty">Loading...</div></div>
+      <div class="vsec-label" style="margin-top:4px">AIRCRAFT</div>
+      <div id="vflights" class="vlist"><div class="empty">Loading...</div></div>
     </div>
 
-    <!-- AI INTEL -->
-    <div class="tab-panel" id="panel-intel">
-      <div class="intel-header">
-        <span>◈</span> AI Intelligence
-        <span class="intel-badge">BETA</span>
-      </div>
-      <div id="intel-content" class="intel-content">
-        <div class="loading-msg">Analyzing data...</div>
-      </div>
+    <!-- INTEL -->
+    <div class="panel" id="panel-intel">
+      <div class="intel-hdr"><span>◈</span> AI Intelligence <span class="beta">BETA</span></div>
+      <div id="intel" class="intel-body"><div class="empty">Analyzing...</div></div>
     </div>
 
     <!-- COMMUNITY -->
-    <div class="tab-panel" id="panel-community">
-      <div class="community-header">
-        <span>Community OSINT</span>
-        <span class="online-count"><span class="dot dot-green pulse"></span> <span id="online-count">—</span> online</span>
+    <div class="panel" id="panel-community">
+      <div class="comm-hdr">Community OSINT <span class="online"><span class="dot green blink"></span><span id="online">—</span> online</span></div>
+      <div class="postbox">
+        <textarea id="pinput" maxlength="280" rows="3" placeholder="Share an observation... (anonymous)"></textarea>
+        <div class="postfooter"><span id="pchars">280</span><button id="pbtn">Post</button></div>
       </div>
-      <div class="post-box">
-        <textarea id="post-input" placeholder="Share an observation... (public, anonymous)" rows="3" maxlength="280"></textarea>
-        <div class="post-footer">
-          <span class="post-chars" id="post-chars">280</span>
-          <button class="post-btn" id="post-btn">Post</button>
-        </div>
-      </div>
-      <div id="community-feed" class="community-list">
-        <div class="loading-msg">Loading posts...</div>
-      </div>
+      <div id="cfeed" class="comm-list"><div class="empty">Loading posts...</div></div>
     </div>
   </aside>
 </div>
 
-<!-- DETAIL PANEL -->
-<div id="detail-panel" class="detail-panel hidden">
-  <button class="detail-close" id="detail-close">✕</button>
-  <div id="detail-content"></div>
+<!-- DETAIL DRAWER -->
+<div id="drawer" class="drawer hidden">
+  <button id="drawer-close">✕</button>
+  <div id="drawer-content"></div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
