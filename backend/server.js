@@ -63,7 +63,7 @@ let aisSocket = null;
 let aisReconnectTimer = null;
 
 function connectAIS() {
-  if (!process.env.AIS_API_KEY || process.env.AIS_API_KEY === "dein_aisstream_api_key_hier") {
+  if (!process.env.AIS_API_KEY || process.env.AIS_API_KEY === "b22e06db2f43896bc45007f245db790c93a5b2f9") {
     console.log("[AIS] Kein API Key – nutze Demo-Daten");
     loadDemoShips();
     return;
