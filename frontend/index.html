@@ -1,114 +1,1024 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Sentinel – Global Intelligence</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230a0c0f'/><circle cx='16' cy='16' r='7' fill='none' stroke='%2300d4aa' stroke-width='2'/><circle cx='16' cy='16' r='3' fill='%2300d4aa'/><line x1='16' y1='2' x2='16' y2='8' stroke='%2300d4aa' stroke-width='1.5'/><line x1='16' y1='24' x2='16' y2='30' stroke='%2300d4aa' stroke-width='1.5'/><line x1='2' y1='16' x2='8' y2='16' stroke='%2300d4aa' stroke-width='1.5'/><line x1='24' y1='16' x2='30' y2='16' stroke='%2300d4aa' stroke-width='1.5'/></svg>"/>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="styles.css"/>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Sentinel – Global Intelligence</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230a0c0f'/><circle cx='16' cy='16' r='7' fill='none' stroke='%2300d4aa' stroke-width='2'/><circle cx='16' cy='16' r='2.5' fill='%2300d4aa'/></svg>"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080b10;--bg2:#0f1318;--bg3:#161b23;--bg4:#1c2330;
+  --b1:rgba(255,255,255,.06);--b2:rgba(255,255,255,.12);--b3:rgba(255,255,255,.2);
+  --t1:#e2e8f0;--t2:#8892a4;--t3:#4a5568;
+  --teal:#00d4aa;--blue:#1a9eff;--red:#f53b3b;
+  --amber:#f5a623;--orange:#f56f23;--green:#22d68a;--purple:#9b7dff;
+  --font:'JetBrains Mono',monospace;--hh:50px;--sw:360px;
+}
+html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--font);font-size:13px;overflow:hidden}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px}
+
+/* ── ANIMATIONS ── */
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.75)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.pulse{animation:pulse 2s infinite}
+.spin{animation:spin .8s linear infinite;display:inline-block}
+
+/* ── HEADER ── */
+#hdr{
+  position:fixed;top:0;left:0;right:0;height:var(--hh);z-index:2000;
+  background:rgba(8,11,16,.97);border-bottom:1px solid var(--b1);
+  display:flex;align-items:center;padding:0 14px;gap:12px;
+  backdrop-filter:blur(12px);
+}
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:15px;color:var(--teal);letter-spacing:.14em;white-space:nowrap;flex-shrink:0}
+.logo span{color:var(--t3)}
+
+.hbtns{display:flex;gap:4px;flex:1;min-width:0;overflow:hidden}
+.hbtn{display:flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--b1);
+  color:var(--t3);font-family:var(--font);font-size:10px;padding:4px 9px;border-radius:3px;
+  cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0}
+.hbtn.on{border-color:var(--b2);color:var(--t2)}
+.hbtn:hover{background:var(--bg4)}
+.hbtn .cnt{color:var(--t3);font-size:9px}
+
+.dot{width:6px;height:6px;border-radius:50%;display:inline-block;flex-shrink:0}
+.dot.teal{background:var(--teal)}.dot.blue{background:var(--blue)}
+.dot.red{background:var(--red)}.dot.amber{background:var(--amber)}
+.dot.green{background:var(--green)}
+
+.hright{display:flex;align-items:center;gap:10px;margin-left:auto;flex-shrink:0}
+
+/* ── TRANSLATE BTN ── */
+#xlbtn{
+  display:flex;align-items:center;gap:7px;
+  background:var(--bg3);border:1px solid var(--b2);
+  color:var(--t2);font-family:var(--font);font-size:10px;
+  padding:5px 12px;border-radius:3px;cursor:pointer;
+  transition:all .2s;white-space:nowrap;user-select:none;
+}
+#xlbtn:hover{background:var(--bg4)}
+#xlbtn.on{border-color:var(--teal);color:var(--teal);background:rgba(0,212,170,.07)}
+#xlbtn:disabled{opacity:.5;cursor:wait}
+#xlbtn .pill{padding:1px 6px;border-radius:2px;font-size:8px;font-weight:600;letter-spacing:.08em;
+  background:rgba(255,255,255,.07);color:var(--t3);transition:all .2s}
+#xlbtn.on .pill{background:rgba(0,212,170,.2);color:var(--teal)}
+
+/* ── STATUS ── */
+.hstatus{display:flex;align-items:center;gap:7px}
+#sdot{width:7px;height:7px;border-radius:50%;background:var(--t3);transition:all .3s}
+#sdot.live{background:var(--green);box-shadow:0 0 6px var(--green)}
+#sdot.load{background:var(--amber)}
+#sdot.err{background:var(--red)}
+#stxt{font-size:10px;color:var(--t2)}
+#lupd{font-size:9px;color:var(--t3)}
+
+/* ── LAYOUT ── */
+#root{position:fixed;top:var(--hh);left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr var(--sw)}
+
+/* ── MAP ── */
+#mwrap{position:relative;overflow:hidden}
+#map{width:100%;height:100%;background:#04060a}
+.leaflet-container{background:#04060a}
+.leaflet-control-zoom{display:none}
+.leaflet-control-attribution{display:none!important}
+.mc-sm,.mc-md,.mc-lg{background:rgba(0,212,170,.1)!important;border:1px solid rgba(0,212,170,.3)!important}
+.mc-sm div,.mc-md div,.mc-lg div{background:rgba(0,212,170,.2)!important;color:var(--teal)!important;font-family:var(--font)!important;font-size:10px!important;font-weight:600!important}
+.leaflet-popup-content-wrapper{background:rgba(12,17,26,.97)!important;border:1px solid rgba(255,255,255,.14)!important;border-radius:5px!important;color:var(--t1)!important;font-family:var(--font)!important;font-size:11px!important;box-shadow:0 8px 32px rgba(0,0,0,.8)!important;padding:0!important}
+.leaflet-popup-content{margin:0!important}
+.leaflet-popup-tip-container{display:none}
+.leaflet-popup-close-button{color:var(--t2)!important;top:8px!important;right:10px!important;font-size:14px!important}
+.pop{padding:11px 14px;min-width:210px}
+.pop-title{font-size:12px;font-weight:600;margin-bottom:8px;padding-right:18px}
+.pop-grid{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:10px;margin-bottom:6px}
+.pk{color:var(--t3)}.pv{color:var(--t1)}
+.pop-tag{display:inline-block;padding:2px 7px;border-radius:2px;font-size:8px;font-weight:600;letter-spacing:.06em;margin-top:4px}
+.pop-link{display:block;margin-top:7px;font-size:10px;color:var(--blue)}
+
+/* Zone tooltip */
+.leaflet-tooltip.ztip{background:rgba(8,11,16,.95)!important;border:none!important;border-radius:3px!important;padding:3px 9px!important;font-family:var(--font)!important;font-size:9px!important;box-shadow:none!important;pointer-events:none}
+
+/* Map legend */
+#legend{position:absolute;bottom:14px;left:12px;z-index:900;background:rgba(8,11,16,.92);border:1px solid var(--b1);padding:8px 12px;border-radius:4px;backdrop-filter:blur(6px)}
+.leg-t{font-size:8px;color:var(--t3);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
+.leg-r{display:flex;align-items:center;gap:7px;font-size:9px;color:var(--t2);margin-bottom:3px;line-height:1}
+.leg-r:last-child{margin-bottom:0}
+.leg-d{width:8px;height:8px;display:inline-block;border-radius:50%;flex-shrink:0}
+
+/* ── SIDEBAR ── */
+#sb{background:var(--bg2);border-left:1px solid var(--b1);display:flex;flex-direction:column;overflow:hidden}
+.tabs{display:flex;border-bottom:1px solid var(--b1);flex-shrink:0}
+.tab{flex:1;padding:11px 4px;font-family:var(--font);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:all .15s}
+.tab:hover{color:var(--t2)}.tab.on{color:var(--teal);border-bottom-color:var(--teal)}
+.panel{display:none;flex:1;overflow-y:auto;flex-direction:column}
+.panel.on{display:flex;flex-direction:column}
+
+/* ── FEED ── */
+.warnbar{display:flex;align-items:flex-start;gap:7px;background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.2);margin:8px;border-radius:3px;padding:7px 10px;font-size:10px;color:var(--amber);line-height:1.5;flex-shrink:0}
+.fbar{display:flex;gap:4px;padding:0 8px 8px;flex-shrink:0;flex-wrap:wrap}
+.ff{font-family:var(--font);font-size:9px;padding:3px 8px;border-radius:2px;border:1px solid var(--b1);background:transparent;color:var(--t3);cursor:pointer;transition:all .12s}
+.ff:hover{color:var(--t2);border-color:var(--b2)}
+.ff.on{color:var(--teal);border-color:rgba(0,212,170,.4);background:rgba(0,212,170,.06)}
+.feedlist{flex:1;overflow-y:auto}
+
+/* translate progress */
+.xlprog{position:sticky;top:0;z-index:5;background:rgba(0,212,170,.08);border-bottom:1px solid rgba(0,212,170,.25);padding:6px 12px;font-size:10px;color:var(--teal);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.xlbar{flex:1;height:2px;background:rgba(255,255,255,.08);border-radius:1px;overflow:hidden}
+.xlfill{height:100%;background:var(--teal);border-radius:1px;transition:width .3s}
+
+.fi{padding:11px 12px;border-bottom:1px solid var(--b1);cursor:pointer;transition:background .1s;animation:fadeIn .2s ease}
+.fi:hover{background:rgba(255,255,255,.022)}
+.fi-top{display:flex;align-items:center;gap:6px;margin-bottom:5px;flex-wrap:wrap}
+.badge{font-size:8px;font-weight:600;padding:2px 6px;border-radius:2px;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap}
+.bv{background:rgba(34,214,138,.12);color:var(--green);border:1px solid rgba(34,214,138,.25)}
+.bu{background:rgba(245,166,35,.12);color:var(--amber);border:1px solid rgba(245,166,35,.25)}
+.bp{background:rgba(245,59,59,.12);color:var(--red);border:1px solid rgba(245,59,59,.25)}
+.fsrc{font-size:9px;color:var(--t3)}
+.ftime{font-size:9px;color:var(--t3);margin-left:auto}
+.ftext{font-size:11px;color:var(--t1);line-height:1.58;margin-bottom:5px;transition:color .25s,opacity .25s}
+.ftext.xlating{opacity:.35}
+.ftext.xlated{color:#72c5f5}
+.ftags{display:flex;gap:3px;flex-wrap:wrap}
+.ftag{font-size:8px;padding:1px 5px;border-radius:2px;background:rgba(255,255,255,.05);color:var(--t3)}
+
+/* ── VESSELS ── */
+.vsrch{padding:8px;flex-shrink:0}
+.vsrch input{width:100%;background:var(--bg3);border:1px solid var(--b1);color:var(--t1);font-family:var(--font);font-size:11px;padding:7px 10px;border-radius:3px;outline:none;transition:border-color .15s}
+.vsrch input::placeholder{color:var(--t3)}.vsrch input:focus{border-color:var(--teal)}
+.vseclbl{padding:5px 12px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);background:var(--bg);border-top:1px solid var(--b1);border-bottom:1px solid var(--b1);flex-shrink:0}
+.vlist{overflow-y:auto;max-height:220px}
+.vi{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid var(--b1);cursor:pointer;transition:background .1s}
+.vi:hover{background:rgba(255,255,255,.022)}
+.vico{width:26px;height:26px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;border:1px solid}
+.vis{background:rgba(26,158,255,.1);border-color:rgba(26,158,255,.25);color:var(--blue)}
+.vip{background:rgba(0,212,170,.1);border-color:rgba(0,212,170,.25);color:var(--teal)}
+.vim{background:rgba(245,111,35,.1);border-color:rgba(245,111,35,.3)!important;color:#f5a070}
+.vnfo{flex:1;min-width:0}
+.vname{font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vsub{font-size:9px;color:var(--t3);margin-top:1px}
+.vrt{text-align:right;flex-shrink:0}
+.vspd{font-size:11px;color:var(--teal)}.vhdg{font-size:9px;color:var(--t3)}
+
+/* ── INTEL ── */
+.ihdr{padding:10px 12px;font-size:11px;color:var(--teal);border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.beta{margin-left:auto;font-size:8px;padding:1px 6px;border-radius:2px;background:rgba(155,125,255,.15);color:var(--purple);border:1px solid rgba(155,125,255,.25);letter-spacing:.08em}
+.ibody{flex:1;overflow-y:auto;padding:8px}
+.icard{background:var(--bg3);border:1px solid var(--b2);border-radius:4px;padding:10px 12px;margin-bottom:8px}
+.it{font-size:11px;color:var(--teal);margin-bottom:6px;font-weight:500}
+.ib{font-size:10px;color:var(--t2);line-height:1.65;margin-bottom:8px}
+.iconf{display:flex;align-items:center;gap:8px}
+.iclbl{font-size:9px;color:var(--t3);white-space:nowrap}
+.icbar{flex:1;height:3px;background:var(--bg);border-radius:2px;overflow:hidden}
+.icfill{height:100%;border-radius:2px;transition:width 1.2s}
+.chi{background:var(--green)}.cmd{background:var(--amber)}.clo{background:var(--red)}
+.icpct{font-size:9px;color:var(--t3);min-width:28px;text-align:right}
+.idiv{font-size:9px;color:var(--t3);letter-spacing:.1em;text-transform:uppercase;margin:10px 0 6px;display:flex;align-items:center;gap:8px}
+.idiv::after{content:'';flex:1;height:1px;background:var(--b1)}
+
+/* ── COMMUNITY ── */
+.chdr{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--b1);font-size:11px;flex-shrink:0}
+.conl{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--t3)}
+.postbox{padding:8px;border-bottom:1px solid var(--b1);flex-shrink:0}
+.postbox textarea{width:100%;background:var(--bg3);border:1px solid var(--b1);color:var(--t1);font-family:var(--font);font-size:11px;padding:8px 10px;border-radius:3px;resize:none;outline:none;line-height:1.5;transition:border-color .15s}
+.postbox textarea::placeholder{color:var(--t3)}.postbox textarea:focus{border-color:var(--teal)}
+.pfoot{display:flex;justify-content:space-between;align-items:center;margin-top:6px}
+#pchars{font-size:9px;color:var(--t3)}
+#pbtn{background:rgba(0,212,170,.1);border:1px solid rgba(0,212,170,.3);color:var(--teal);font-family:var(--font);font-size:10px;padding:5px 14px;border-radius:3px;cursor:pointer;transition:all .15s}
+#pbtn:hover{background:rgba(0,212,170,.18)}
+.clist{flex:1;overflow-y:auto}
+.cpost{padding:10px 12px;border-bottom:1px solid var(--b1);animation:fadeIn .2s ease}
+.cphdr{display:flex;gap:8px;align-items:center;margin-bottom:5px}
+.cpanon{font-size:9px;color:var(--t3)}.cptime{font-size:9px;color:var(--t3);margin-left:auto}
+.cptxt{font-size:11px;line-height:1.5;margin-bottom:5px}
+.cpact{display:flex;gap:10px}
+.cpbtn{font-size:9px;color:var(--t3);background:none;border:none;cursor:pointer;font-family:var(--font);padding:2px 4px;border-radius:2px;transition:color .1s}
+.cpbtn:hover{color:var(--t2)}
+
+/* ── DRAWER ── */
+#drawer{position:fixed;bottom:0;left:0;width:calc(100% - var(--sw));max-height:210px;
+  background:rgba(8,11,16,.98);border-top:1px solid var(--b2);z-index:800;
+  padding:14px 16px;transform:translateY(100%);transition:transform .25s ease;
+  backdrop-filter:blur(10px);overflow-y:auto}
+#drawer.open{transform:translateY(0)}
+#dcls{position:absolute;top:10px;right:12px;background:none;border:none;color:var(--t3);cursor:pointer;font-size:12px;font-family:var(--font)}
+#dcls:hover{color:var(--t1)}
+.dtitle{font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.dk{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px}
+.dv{font-size:12px;font-weight:500}
+
+.empty{padding:20px 12px;text-align:center;font-size:10px;color:var(--t3);letter-spacing:.05em}
+
+@media(max-width:768px){
+  :root{--sw:100%}
+  #root{grid-template-columns:1fr;grid-template-rows:55vh 45vh}
+  .hbtns{display:none}
+  #drawer{width:100%}
+}
+</style>
 </head>
 <body>
 
-<!-- HEADER -->
-<header id="header">
-  <div class="logo">SENTINEL<span class="logo-sub">.IO</span></div>
-
-  <div class="header-toggles">
-    <button class="h-btn active" data-layer="ships"><span class="dot blue"></span>Ships<span class="cnt" id="cnt-ships">—</span></button>
-    <button class="h-btn active" data-layer="flights"><span class="dot teal"></span>Aircraft<span class="cnt" id="cnt-flights">—</span></button>
-    <button class="h-btn active" data-layer="events"><span class="dot red blink"></span>Events<span class="cnt" id="cnt-events">—</span></button>
-    <button class="h-btn active" id="btn-zones"><span class="dot amber"></span>Zones</button>
+<header id="hdr">
+  <div class="logo">SENTINEL<span>.IO</span></div>
+  <div class="hbtns">
+    <button class="hbtn on" data-ly="ships"><span class="dot blue"></span>Ships<span class="cnt" id="cs">—</span></button>
+    <button class="hbtn on" data-ly="flights"><span class="dot teal"></span>Aircraft<span class="cnt" id="cf">—</span></button>
+    <button class="hbtn on" data-ly="events"><span class="dot red pulse"></span>Events<span class="cnt" id="ce">—</span></button>
+    <button class="hbtn on" id="bzones"><span class="dot amber"></span>Zones</button>
   </div>
-
-  <div class="header-right">
-    <button id="btn-translate" class="translate-btn">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-      Translate to EN
-      <span class="tgl" id="tgl-label">OFF</span>
+  <div class="hright">
+    <button id="xlbtn" title="Translate all news to English">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+      Translate → EN
+      <span class="pill" id="xlpill">OFF</span>
     </button>
     <div class="hstatus">
-      <div class="sdot" id="sdot"></div>
+      <div id="sdot"></div>
       <span id="stxt">Connecting...</span>
-      <span class="lupd" id="lupd"></span>
+      <span id="lupd"></span>
     </div>
   </div>
 </header>
 
-<!-- LAYOUT -->
 <div id="root">
-  <div id="mapwrap">
+  <div id="mwrap">
     <div id="map"></div>
     <div id="legend">
-      <div class="leg-title">MAP KEY</div>
-      <div class="leg-row"><span class="leg-dot" style="background:#0e9eff"></span>Warship</div>
-      <div class="leg-row"><span class="leg-dot" style="background:#4488bb"></span>Vessel</div>
-      <div class="leg-row"><span class="leg-dot" style="background:#ff7700;border-radius:2px;transform:rotate(45deg)"></span>Military flight</div>
-      <div class="leg-row"><span class="leg-dot" style="background:#00d4aa;border-radius:2px;transform:rotate(45deg)"></span>Civil flight</div>
-      <div class="leg-row"><span class="leg-dot" style="background:#ff2222;animation:blink 1.5s infinite"></span>Critical event</div>
-      <div class="leg-row"><span class="leg-dot" style="background:#ff6600"></span>High event</div>
-      <div class="leg-row"><span class="leg-dot" style="background:#ffaa00"></span>Elevated event</div>
+      <div class="leg-t">MAP KEY</div>
+      <div class="leg-r"><span class="leg-d" style="background:#1a9eff"></span>Warship</div>
+      <div class="leg-r"><span class="leg-d" style="background:#3a6a99"></span>Vessel</div>
+      <div class="leg-r"><span class="leg-d" style="background:#f56f23;border-radius:2px;transform:rotate(45deg)"></span>Military flight</div>
+      <div class="leg-r"><span class="leg-d" style="background:#00d4aa;border-radius:2px;transform:rotate(45deg)"></span>Civil flight</div>
+      <div class="leg-r"><span class="leg-d" style="background:#f53b3b"></span>Critical event</div>
+      <div class="leg-r"><span class="leg-d" style="background:#f56f23"></span>High event</div>
+      <div class="leg-r"><span class="leg-d" style="background:#f5a623"></span>Elevated event</div>
     </div>
   </div>
 
-  <aside id="sidebar">
+  <aside id="sb">
     <div class="tabs">
-      <button class="tab active" data-tab="feed">Feed</button>
+      <button class="tab on" data-tab="feed">Feed</button>
       <button class="tab" data-tab="vessels">Vessels</button>
       <button class="tab" data-tab="intel">Intel</button>
       <button class="tab" data-tab="community">Community</button>
     </div>
 
     <!-- FEED -->
-    <div class="panel active" id="panel-feed">
-      <div class="warn-bar">⚠ Unverified sources may contain misinformation. Always cross-reference.</div>
-      <div class="feed-bar">
-        <button class="ff active" data-trust="all">All</button>
+    <div class="panel on" id="panel-feed">
+      <div class="warnbar">⚠ Unverified sources may contain misinformation. Always cross-reference before acting.</div>
+      <div class="fbar">
+        <button class="ff on" data-trust="all">All</button>
         <button class="ff" data-trust="verified">✓ Verified</button>
         <button class="ff" data-trust="unverified">~ Unverified</button>
         <button class="ff" data-trust="propaganda">⚑ Propaganda</button>
       </div>
-      <div id="feed" class="feed-list"><div class="empty">Loading news...</div></div>
+      <div id="feedlist" class="feedlist"><div class="empty">Loading world news...</div></div>
     </div>
 
     <!-- VESSELS -->
     <div class="panel" id="panel-vessels">
-      <div class="vsearch"><input id="vsearch" type="text" placeholder="Search vessel / callsign..." autocomplete="off"/></div>
-      <div class="vsec-label">SHIPS</div>
+      <div class="vsrch"><input id="vsrch" type="text" placeholder="Search vessel / callsign / country..." autocomplete="off"/></div>
+      <div class="vseclbl">SHIPS — Live AIS</div>
       <div id="vships" class="vlist"><div class="empty">Loading...</div></div>
-      <div class="vsec-label" style="margin-top:4px">AIRCRAFT</div>
+      <div class="vseclbl" style="margin-top:4px">AIRCRAFT — Live ADS-B</div>
       <div id="vflights" class="vlist"><div class="empty">Loading...</div></div>
     </div>
 
     <!-- INTEL -->
     <div class="panel" id="panel-intel">
-      <div class="intel-hdr"><span>◈</span> AI Intelligence <span class="beta">BETA</span></div>
-      <div id="intel" class="intel-body"><div class="empty">Analyzing...</div></div>
+      <div class="ihdr">◈ AI Intelligence <span class="beta">BETA</span></div>
+      <div id="intel" class="ibody"><div class="empty">Analyzing global data...</div></div>
     </div>
 
     <!-- COMMUNITY -->
     <div class="panel" id="panel-community">
-      <div class="comm-hdr">Community OSINT <span class="online"><span class="dot green blink"></span><span id="online">—</span> online</span></div>
+      <div class="chdr">Community OSINT <span class="conl"><span class="dot green pulse"></span><span id="online">—</span> online</span></div>
       <div class="postbox">
-        <textarea id="pinput" maxlength="280" rows="3" placeholder="Share an observation... (anonymous)"></textarea>
-        <div class="postfooter"><span id="pchars">280</span><button id="pbtn">Post</button></div>
+        <textarea id="pinput" maxlength="280" rows="3" placeholder="Share an observation... (public, anonymous)"></textarea>
+        <div class="pfoot"><span id="pchars">280</span><button id="pbtn">Post</button></div>
       </div>
-      <div id="cfeed" class="comm-list"><div class="empty">Loading posts...</div></div>
+      <div id="cfeed" class="clist"><div class="empty">Loading posts...</div></div>
     </div>
   </aside>
 </div>
 
-<!-- DETAIL DRAWER -->
-<div id="drawer" class="drawer hidden">
-  <button id="drawer-close">✕</button>
-  <div id="drawer-content"></div>
+<div id="drawer">
+  <button id="dcls">✕</button>
+  <div id="dcontent"></div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
-<script src="app.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════
+// SENTINEL v4 — Complete Frontend
+// ═══════════════════════════════════════════════════════════
+
+// ─── BACKEND URL ───────────────────────────────────────────
+const API = (() => {
+  const h = location.hostname;
+  return (h==='localhost'||h==='127.0.0.1') ? 'http://localhost:3001' : 'https://senitel-backend.onrender.com';
+})();
+
+// ─── RSS FEEDS — direct via CORS proxy ─────────────────────
+// These RSS feeds are fetched client-side via a CORS proxy
+// so the app works even without the backend running.
+const RSS_FEEDS = [
+  { url:'https://feeds.bbci.co.uk/news/world/rss.xml',     name:'BBC World',    trust:'verified'   },
+  { url:'https://feeds.reuters.com/reuters/worldNews',      name:'Reuters',      trust:'verified'   },
+  { url:'https://www.aljazeera.com/xml/rss/all.xml',        name:'Al Jazeera',   trust:'verified'   },
+  { url:'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', name:'NYT World', trust:'verified' },
+  { url:'https://www.theguardian.com/world/rss',            name:'The Guardian', trust:'verified'   },
+  { url:'https://feeds.feedburner.com/BreakingDefense',     name:'Breaking Defense', trust:'verified'},
+  { url:'https://www.defensenews.com/arc/outboundfeeds/rss/', name:'Defense News', trust:'verified' },
+  { url:'https://www.kyivindependent.com/rss/',             name:'Kyiv Independent', trust:'unverified'},
+  { url:'https://meduza.io/en/rss2/news',                   name:'Meduza (EN)',  trust:'unverified' },
+  { url:'https://english.alarabiya.net/rss.xml',            name:'Al Arabiya',   trust:'unverified' },
+];
+
+// CORS proxy — rss2json converts RSS to JSON with CORS headers
+const PROXY = 'https://api.rss2json.com/v1/api.json?rss_url=';
+
+// ─── STATE ─────────────────────────────────────────────────
+const S = {
+  ships:[], flights:[], events:[], news:[],
+  trust:'all', translated:false, translating:false,
+  xlcache:new Map(),
+  posts:[], online:52+Math.floor(Math.random()*80),
+  layers:{ships:true,flights:true,events:true,zones:true},
+};
+
+// ─── MAP ───────────────────────────────────────────────────
+const map = L.map('map',{zoomControl:false,attributionControl:false,preferCanvas:true}).setView([25,20],3);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd',opacity:.92}).addTo(map);
+L.control.zoom({position:'bottomright'}).addTo(map);
+
+const GL = {
+  ships:   L.markerClusterGroup({maxClusterRadius:50,disableClusteringAtZoom:6,chunkedLoading:true,iconCreateFunction:c=>L.divIcon({html:`<div class="mc-sm" style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;color:#00d4aa;font-family:monospace;font-weight:600;background:rgba(0,212,170,.15);border:1px solid rgba(0,212,170,.35)">${c.getChildCount()}</div>`,className:'',iconSize:[34,34]})}),
+  flights: L.markerClusterGroup({maxClusterRadius:40,disableClusteringAtZoom:7,chunkedLoading:true,iconCreateFunction:c=>L.divIcon({html:`<div style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:#00d4aa;font-weight:600;background:rgba(0,212,170,.12);border:1px solid rgba(0,212,170,.3)">${c.getChildCount()}</div>`,className:'',iconSize:[30,30]})}),
+  events:  L.layerGroup(),
+  zones:   L.layerGroup(),
+};
+Object.values(GL).forEach(l=>map.addLayer(l));
+
+// ─── CONFLICT ZONES ────────────────────────────────────────
+const ZONES = [
+  {n:'Ukraine War',         lat:49.0,lon:32.0,r:370000,c:'#f53b3b',i:'critical'},
+  {n:'Gaza / West Bank',    lat:31.5,lon:34.6,r:48000, c:'#f54420',i:'critical'},
+  {n:'Red Sea (Houthi)',    lat:14.5,lon:42.5,r:330000,c:'#f56f23',i:'high'},
+  {n:'Lebanon-Israel',      lat:33.2,lon:35.6,r:68000, c:'#f56f23',i:'high'},
+  {n:'Black Sea',           lat:45.5,lon:32.5,r:240000,c:'#f54460',i:'high'},
+  {n:'Strait of Hormuz',    lat:26.6,lon:56.3,r:88000, c:'#f5a623',i:'high'},
+  {n:'Sudan',               lat:15.5,lon:32.5,r:310000,c:'#f58023',i:'high'},
+  {n:'Syria',               lat:35.0,lon:38.5,r:220000,c:'#f58023',i:'high'},
+  {n:'Taiwan Strait',       lat:24.5,lon:119.5,r:165000,c:'#f5c623',i:'elevated'},
+  {n:'South China Sea',     lat:12.0,lon:114.0,r:560000,c:'#f5c623',i:'elevated'},
+  {n:'N. Korea Border',     lat:38.3,lon:127.5,r:115000,c:'#f5c623',i:'elevated'},
+  {n:'Sahel Region',        lat:15.0,lon:1.0,  r:720000,c:'#c5a010',i:'elevated'},
+  {n:'Ethiopia/Horn',       lat:9.0, lon:40.0, r:290000,c:'#c5a010',i:'elevated'},
+  {n:'Bab el-Mandeb',       lat:12.5,lon:43.3, r:78000, c:'#f5a623',i:'high'},
+  {n:'Myanmar',             lat:19.5,lon:96.0, r:260000,c:'#c5a010',i:'elevated'},
+  {n:'West Africa',         lat:12.0,lon:-2.0, r:400000,c:'#a08010',i:'elevated'},
+];
+
+const ZOP={critical:.17,high:.11,elevated:.07};
+const ZBR={critical:.75,high:.55,elevated:.3};
+const ZDS={critical:null,high:null,elevated:'6 4'};
+
+function drawZones(){
+  GL.zones.clearLayers();
+  ZONES.forEach(z=>{
+    const c=L.circle([z.lat,z.lon],{radius:z.r,color:z.c,fillColor:z.c,fillOpacity:ZOP[z.i]||.07,weight:1.5,opacity:ZBR[z.i]||.35,dashArray:ZDS[z.i]});
+    c.bindTooltip(`<span style="color:${z.c};font-weight:600"><span style="opacity:.55;font-size:8px;display:block;text-transform:uppercase;letter-spacing:.1em">${z.i}</span>${z.n}</span>`,{permanent:true,direction:'center',className:'ztip'});
+    GL.zones.addLayer(c);
+  });
+}
+drawZones();
+
+// ─── ICONS ─────────────────────────────────────────────────
+function mkIcon(type,sub){
+  let h='';
+  if(type==='ship'){
+    const c=sub==='mil'?'#1a9eff':sub==='unk'?'#445':'#3a6a99';
+    const g=sub==='mil'?`0 0 8px ${c}88`:`0 0 4px ${c}55`;
+    h=`<div style="width:10px;height:10px;border-radius:50%;background:${c};border:1.5px solid ${c}88;box-shadow:${g}"></div>`;
+  }else if(type==='flight'){
+    const c=sub==='mil'?'#f56f23':'#00d4aa';
+    h=`<div style="width:9px;height:9px;background:${c};transform:rotate(45deg);border:1.5px solid ${c}88;box-shadow:0 0 6px ${c}66"></div>`;
+  }else if(type==='event'){
+    const c=sub==='critical'?'#f53b3b':sub==='high'?'#f56f23':'#f5a623';
+    h=`<div style="width:13px;height:13px;border-radius:50%;background:${c};border:2px solid ${c}44;box-shadow:0 0 10px ${c}99;animation:pulse 1.5s infinite"></div>`;
+  }
+  return L.divIcon({html:h,className:'',iconSize:[13,13],iconAnchor:[6,6]});
+}
+
+// ─── RSS FETCHING ──────────────────────────────────────────
+async function fetchRSS(){
+  const all=[];
+  const results = await Promise.allSettled(
+    RSS_FEEDS.map(async feed=>{
+      try{
+        const r = await fetch(`${PROXY}${encodeURIComponent(feed.url)}&count=15`,{signal:AbortSignal.timeout(8000)});
+        const d = await r.json();
+        if(d.status==='ok' && d.items){
+          return d.items.map(item=>({
+            id: item.guid||item.link||Math.random(),
+            title: stripHtml(item.title||''),
+            text:  stripHtml(item.description||item.content||item.title||''),
+            url:   item.link||'',
+            date:  item.pubDate ? new Date(item.pubDate).getTime() : Date.now(),
+            source: feed.name,
+            trust: feed.trust,
+            type: 'rss',
+          }));
+        }
+      }catch(e){ return []; }
+    })
+  );
+  results.forEach(r=>{ if(r.status==='fulfilled'&&r.value) all.push(...r.value); });
+  return all.sort((a,b)=>b.date-a.date);
+}
+
+function stripHtml(s){
+  return (s||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,350);
+}
+
+// Extract geo hints from news text to show on map
+function geoHint(text){
+  const t=text.toLowerCase();
+  const db={
+    'ukraine':{lat:49.0,lon:32.0},'kyiv':{lat:50.4,lon:30.5},'kherson':{lat:46.6,lon:32.6},
+    'kharkiv':{lat:50.0,lon:36.2},'zaporizhzhia':{lat:47.8,lon:35.2},'donbas':{lat:48.2,lon:38.0},
+    'mariupol':{lat:47.1,lon:37.5},'bakhmut':{lat:48.6,lon:38.0},'odesa':{lat:46.5,lon:30.7},
+    'crimea':{lat:45.3,lon:34.0},'russia':{lat:55.7,lon:37.6},'moscow':{lat:55.7,lon:37.6},
+    'belgorod':{lat:50.6,lon:36.6},
+    'israel':{lat:31.0,lon:35.0},'gaza':{lat:31.5,lon:34.4},'tel aviv':{lat:32.1,lon:34.8},
+    'west bank':{lat:32.0,lon:35.2},'ramallah':{lat:31.9,lon:35.2},
+    'lebanon':{lat:33.9,lon:35.5},'beirut':{lat:33.9,lon:35.5},
+    'syria':{lat:34.8,lon:38.9},'damascus':{lat:33.5,lon:36.3},
+    'iran':{lat:35.7,lon:51.4},'tehran':{lat:35.7,lon:51.4},
+    'iraq':{lat:33.3,lon:44.4},'baghdad':{lat:33.3,lon:44.4},
+    'yemen':{lat:15.5,lon:48.5},'houthi':{lat:15.0,lon:44.0},
+    'red sea':{lat:20.0,lon:38.0},'hormuz':{lat:26.6,lon:56.3},
+    'black sea':{lat:43.0,lon:34.0},'taiwan':{lat:23.7,lon:120.9},
+    'south china sea':{lat:15.0,lon:115.0},'china':{lat:35.0,lon:105.0},
+    'north korea':{lat:40.0,lon:127.5},'pyongyang':{lat:39.0,lon:125.8},
+    'sudan':{lat:12.9,lon:30.2},'ethiopia':{lat:9.1,lon:40.5},
+    'somalia':{lat:5.2,lon:46.2},'myanmar':{lat:19.5,lon:96.0},
+    'afghanistan':{lat:33.9,lon:67.7},'pakistan':{lat:30.4,lon:69.3},
+    'libya':{lat:26.3,lon:17.2},'mali':{lat:17.6,lon:-4.0},
+    'sahel':{lat:15.0,lon:10.0},'bab el-mandeb':{lat:12.5,lon:43.3},
+  };
+  const keys=Object.keys(db).sort((a,b)=>b.length-a.length);
+  for(const k of keys){ if(t.includes(k)) return db[k]; }
+  return null;
+}
+
+// ─── TRANSLATION ───────────────────────────────────────────
+// Uses Google Translate unofficial endpoint — works in browser, no API key needed
+// Falls back to MyMemory if blocked
+async function xlate(text){
+  if(!text||text.trim().length<4) return text;
+  const key=text.slice(0,180);
+  if(S.xlcache.has(key)) return S.xlcache.get(key);
+
+  // Method 1: Google Translate (via their unofficial endpoint)
+  try{
+    const r=await fetch(
+      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(text.slice(0,500))}`,
+      {signal:AbortSignal.timeout(6000)}
+    );
+    if(r.ok){
+      const d=await r.json();
+      // Response: [[["translated","original",null,null,1],...],...]
+      if(d&&d[0]&&Array.isArray(d[0])){
+        const translated = d[0].map(s=>s[0]||'').join('').trim();
+        if(translated && translated.length>3){
+          S.xlcache.set(key,translated);
+          return translated;
+        }
+      }
+    }
+  }catch(e){}
+
+  // Method 2: MyMemory fallback
+  for(const lang of ['ru','ar','uk','de','fr','es','zh-CN','fa','he','tr']){
+    try{
+      const r=await fetch(
+        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.slice(0,450))}&langpair=${lang}|en`,
+        {signal:AbortSignal.timeout(5000)}
+      );
+      const d=await r.json();
+      if(d?.responseStatus===200&&d.responseData?.translatedText){
+        const t=d.responseData.translatedText.trim();
+        if(t&&t!==text&&t.length>4){
+          S.xlcache.set(key,t);
+          return t;
+        }
+      }
+    }catch(e){}
+  }
+
+  return text; // Return original if all fail
+}
+
+// Translate all feed items with visual progress
+async function doTranslate(){
+  const container=Q('#feedlist');
+  const items=[...container.querySelectorAll('.ftext[data-orig]')];
+  if(!items.length) return;
+
+  // Insert progress bar
+  let prog=container.querySelector('.xlprog');
+  if(!prog){
+    prog=document.createElement('div');
+    prog.className='xlprog';
+    prog.innerHTML=`<span id="xltxt">Translating <span class="spin">⟳</span></span><div class="xlbar"><div class="xlfill" id="xlfill" style="width:0%"></div></div><span id="xlcnt">0/${items.length}</span>`;
+    container.prepend(prog);
+  }
+
+  let done=0;
+  const batchSize=3;
+  for(let i=0;i<items.length;i+=batchSize){
+    const batch=items.slice(i,i+batchSize);
+    batch.forEach(el=>el.classList.add('xlating'));
+    // Translate batch in parallel
+    const results=await Promise.all(batch.map(el=>xlate(el.getAttribute('data-orig')||'')));
+    batch.forEach((el,j)=>{
+      el.textContent=results[j];
+      el.classList.remove('xlating');
+      el.classList.add('xlated');
+    });
+    done+=batch.length;
+    const pct=Math.round(done/items.length*100);
+    Q('#xlfill').style.width=pct+'%';
+    Q('#xlcnt').textContent=`${done}/${items.length}`;
+    await new Promise(r=>setTimeout(r,10)); // yield
+  }
+  Q('#xltxt').textContent='✓ Translated to English';
+  setTimeout(()=>prog?.remove(),3000);
+}
+
+function undoTranslate(){
+  Q('#feedlist').querySelector('.xlprog')?.remove();
+  QA('.ftext[data-orig]').forEach(el=>{
+    el.textContent=el.getAttribute('data-orig')||'';
+    el.classList.remove('xlated','xlating');
+  });
+}
+
+// ─── TRANSLATE BUTTON ──────────────────────────────────────
+Q('#xlbtn').addEventListener('click',async()=>{
+  if(S.translating) return;
+  S.translated=!S.translated;
+  const btn=Q('#xlbtn'), pill=Q('#xlpill');
+  if(S.translated){
+    btn.classList.add('on'); pill.textContent='ON';
+    btn.disabled=true; S.translating=true;
+    await doTranslate();
+    S.translating=false; btn.disabled=false;
+  }else{
+    btn.classList.remove('on'); pill.textContent='OFF';
+    undoTranslate();
+  }
+});
+
+// ─── LOAD DATA FROM BACKEND ────────────────────────────────
+async function loadShips(){
+  const data=await apiFetch('/ships',[]);
+  S.ships=data;
+  GL.ships.clearLayers();
+  if(!S.layers.ships) return;
+  let n=0;
+  for(const s of data){
+    if(!s.lat||!s.lon||n>=600) break; n++;
+    const isMil=s.type>=35&&s.type<=37;
+    const sub=isMil?'mil':(!s.type||s.type===0)?'unk':'cargo';
+    const m=L.marker([s.lat,s.lon],{icon:mkIcon('ship',sub)});
+    m.bindPopup(shipPop(s,isMil),{maxWidth:260});
+    m.on('click',()=>openDrawer('ship',s));
+    GL.ships.addLayer(m);
+  }
+  Q('#cs').textContent=data.length.toLocaleString();
+  renderVessels();
+}
+
+async function loadFlights(){
+  const data=await apiFetch('/flights',[]);
+  S.flights=data;
+  GL.flights.clearLayers();
+  if(!S.layers.flights) return;
+  let n=0;
+  for(const f of data){
+    if(!f.lat||!f.lon||n>=700) break; n++;
+    const isMil=milFlight(f.callsign);
+    const m=L.marker([f.lat,f.lon],{icon:mkIcon('flight',isMil?'mil':'civ')});
+    m.bindPopup(flightPop(f,isMil),{maxWidth:240});
+    m.on('click',()=>openDrawer('flight',f));
+    GL.flights.addLayer(m);
+  }
+  Q('#cf').textContent=data.length.toLocaleString();
+  renderVessels();
+}
+
+async function loadEvents(){
+  const data=await apiFetch('/events',[]);
+  S.events=data;
+  GL.events.clearLayers();
+  if(!S.layers.events) return;
+  data.forEach(ev=>{
+    if(!ev.lat||!ev.lon) return;
+    const m=L.marker([ev.lat,ev.lon],{icon:mkIcon('event',ev.severity)});
+    m.bindPopup(evPop(ev),{maxWidth:280});
+    m.on('click',()=>openDrawer('event',ev));
+    GL.events.addLayer(m);
+  });
+  Q('#ce').textContent=data.length;
+  buildIntel();
+}
+
+// ─── RSS NEWS (direct fetch) ───────────────────────────────
+async function loadNews(){
+  setStatus('load','Loading news...');
+  const items=await fetchRSS();
+  S.news=items;
+  renderFeed();
+  // Map event markers for news with geo
+  items.forEach(item=>{
+    const loc=geoHint(item.title+' '+item.text);
+    if(loc){ item.lat=loc.lat; item.lon=loc.lon; }
+  });
+  Q('#ce').textContent=(S.events.length||0);
+  if(S.translated) doTranslate();
+}
+
+// ─── RENDER FEED ───────────────────────────────────────────
+function renderFeed(){
+  const el=Q('#feedlist');
+  const filtered=S.trust==='all' ? S.news : S.news.filter(n=>n.trust===S.trust);
+  if(!filtered.length){ el.innerHTML='<div class="empty">No news found</div>'; return; }
+
+  el.innerHTML=filtered.slice(0,60).map(item=>{
+    const tc=item.trust==='verified'?'✓ VERIFIED':item.trust==='propaganda'?'⚑ PROPAGANDA':'~ UNVERIFIED';
+    const bc=item.trust==='verified'?'bv':item.trust==='propaganda'?'bp':'bu';
+    const text=esc(item.title||item.text||'');
+    const tags=getTags(item.title+' '+item.text);
+    const lat=item.lat||0, lon=item.lon||0;
+    return `<div class="fi" onclick="clickNews('${esc(item.url||'')}',${lat},${lon})">
+      <div class="fi-top">
+        <span class="badge ${bc}">${tc}</span>
+        <span class="fsrc">📰 ${esc(item.source||'')}</span>
+        <span class="ftime">${ago(item.date)}</span>
+      </div>
+      <div class="ftext" data-orig="${text}">${text}</div>
+      <div class="ftags">${tags.map(t=>`<span class="ftag">${t}</span>`).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+window.clickNews=(url,lat,lon)=>{
+  if(lat&&lon) map.flyTo([lat,lon],6,{duration:1.2});
+  if(url) window.open(url,'_blank');
+};
+
+// ─── VESSEL LIST ───────────────────────────────────────────
+function renderVessels(){
+  const q=(Q('#vsrch')?.value||'').toLowerCase();
+  const ships=S.ships.filter(s=>!q||(s.name||'').toLowerCase().includes(q)).slice(0,25);
+  const flights=S.flights.filter(f=>!q||(f.callsign||'').toLowerCase().includes(q)||(f.country||'').toLowerCase().includes(q)).slice(0,25);
+  Q('#vships').innerHTML=ships.length ? ships.map(s=>vrow('ship',s)).join('') : '<div class="empty">No ships</div>';
+  Q('#vflights').innerHTML=flights.length ? flights.map(f=>vrow('flight',f)).join('') : '<div class="empty">No aircraft</div>';
+}
+
+function vrow(type,v){
+  const isS=type==='ship';
+  const name=isS?(v.name||`MMSI-${v.mmsi}`):(v.callsign||'UNKNOWN');
+  const sub=isS?stype(v.type):`${v.country||'?'} · ${v.altitude?v.altitude.toLocaleString()+'ft':'—'}`;
+  const spd=isS?`${(v.speed||0).toFixed(1)} kn`:`${v.speed||0} kn`;
+  const hdg=isS?`${v.heading||0}°`:`${v.altitude?v.altitude.toLocaleString()+'ft':'—'}`;
+  const isMil=isS?(v.type>=35&&v.type<=37):milFlight(v.callsign);
+  const sc=(isS&&v.speed<1)?'#f5a623':isMil?'#f56f23':'#22d68a';
+  const ico=isS?(isMil?'vim':'vis'):(isMil?'vim':'vip');
+  return `<div class="vi" onclick="flyTo(${v.lat||0},${v.lon||v.lng||0})">
+    <div class="vico ${ico}">${isS?'⚓':'✈'}</div>
+    <div class="vnfo">
+      <div class="vname" style="${isMil?'color:#f5a070':''}">${esc(name)}${isMil?' 🔶':''}</div>
+      <div class="vsub">${esc(sub)}</div>
+    </div>
+    <div class="vrt">
+      <div style="width:5px;height:5px;border-radius:50%;background:${sc};box-shadow:0 0 4px ${sc};margin-left:auto;margin-bottom:2px"></div>
+      <div class="vspd">${spd}</div><div class="vhdg">${hdg}</div>
+    </div>
+  </div>`;
+}
+
+window.flyTo=(lat,lon)=>{ if(lat&&lon) map.flyTo([lat,lon],7,{duration:1.5}); };
+
+// ─── POPUPS ────────────────────────────────────────────────
+function shipPop(s,isMil){
+  const col=isMil?'#1a9eff':'#3a6a99';
+  return `<div class="pop">
+    <div class="pop-title" style="color:${col}">⚓ ${esc(s.name||'UNKNOWN')}
+      ${isMil?`<span class="pop-tag" style="background:rgba(26,158,255,.15);color:#1a9eff;border:1px solid rgba(26,158,255,.3)">WARSHIP</span>`:''}
+    </div>
+    <div class="pop-grid">
+      <span class="pk">MMSI</span><span class="pv">${s.mmsi||'—'}</span>
+      <span class="pk">TYPE</span><span class="pv">${stype(s.type)}</span>
+      <span class="pk">SPEED</span><span class="pv" style="color:${s.speed===0?'#f5a623':'#22d68a'}">${(s.speed||0).toFixed(1)} kn${s.speed===0?' ⚠ STOPPED':''}</span>
+      <span class="pk">HEADING</span><span class="pv">${s.heading||0}°</span>
+    </div>
+  </div>`;
+}
+
+function flightPop(f,isMil){
+  const col=isMil?'#f56f23':'#00d4aa';
+  return `<div class="pop">
+    <div class="pop-title" style="color:${col}">✈ ${esc(f.callsign||'UNKNOWN')}
+      ${isMil?`<span class="pop-tag" style="background:rgba(245,111,35,.15);color:#f56f23;border:1px solid rgba(245,111,35,.3)">MILITARY</span>`:''}
+    </div>
+    <div class="pop-grid">
+      <span class="pk">COUNTRY</span><span class="pv">${f.country||'?'}</span>
+      <span class="pk">ALTITUDE</span><span class="pv">${f.altitude?f.altitude.toLocaleString()+' ft':'—'}</span>
+      <span class="pk">SPEED</span><span class="pv">${f.speed||'—'} kn</span>
+      <span class="pk">HEADING</span><span class="pv">${f.heading||0}°</span>
+    </div>
+  </div>`;
+}
+
+function evPop(ev){
+  const sc=ev.severity==='critical'?'#f53b3b':ev.severity==='high'?'#f56f23':'#f5a623';
+  const tc=ev.trust==='verified'?'#22d68a':ev.trust==='propaganda'?'#f53b3b':'#f5a623';
+  const tl=ev.trust==='verified'?'✓ VERIFIED':ev.trust==='propaganda'?'⚑ PROPAGANDA':'~ UNVERIFIED';
+  return `<div class="pop">
+    <div class="pop-title" style="color:#f53b3b">⚠ ${esc(ev.title||'Event')}</div>
+    <div class="pop-grid">
+      <span class="pk">REGION</span><span class="pv">${(ev.locationName||'?').toUpperCase()}</span>
+      <span class="pk">SEVERITY</span><span class="pv" style="color:${sc}">${(ev.severity||'?').toUpperCase()}</span>
+      <span class="pk">TYPE</span><span class="pv">${(ev.type||'?').toUpperCase()}</span>
+      <span class="pk">SHIPS</span><span class="pv" style="color:#1a9eff">${ev.nearbyShips||0} nearby</span>
+      <span class="pk">AIRCRAFT</span><span class="pv" style="color:#00d4aa">${ev.nearbyFlights||0} nearby</span>
+    </div>
+    <span class="pop-tag" style="background:${tc}18;color:${tc};border:1px solid ${tc}44">${tl}</span>
+    ${ev.url?`<a class="pop-link" href="${ev.url}" target="_blank">View source ↗</a>`:''}
+  </div>`;
+}
+
+// ─── DETAIL DRAWER ─────────────────────────────────────────
+function openDrawer(type,d){
+  const el=Q('#dcontent');
+  let h='';
+  if(type==='ship'){
+    const isMil=d.type>=35&&d.type<=37;
+    h=`<div class="dtitle" style="color:${isMil?'#1a9eff':'#3a6a99'}">⚓ ${esc(d.name||'Unknown')}${isMil?` <span style="font-size:9px;padding:1px 6px;border-radius:2px;background:rgba(26,158,255,.15);color:#1a9eff">WARSHIP</span>`:''}</div>
+    <div class="dgrid">
+      <div><div class="dk">MMSI</div><div class="dv">${d.mmsi}</div></div>
+      <div><div class="dk">TYPE</div><div class="dv">${stype(d.type)}</div></div>
+      <div><div class="dk">SPEED</div><div class="dv" style="color:${d.speed===0?'#f5a623':'#22d68a'}">${(d.speed||0).toFixed(1)} kn</div></div>
+      <div><div class="dk">HEADING</div><div class="dv">${d.heading||0}°</div></div>
+      <div><div class="dk">POSITION</div><div class="dv">${(d.lat||0).toFixed(3)}, ${(d.lon||0).toFixed(3)}</div></div>
+      <div><div class="dk">AIS STATUS</div><div class="dv" style="color:${d.speed===0?'#f5a623':'#22d68a'}">${d.speed===0?'STOPPED':'ACTIVE'}</div></div>
+    </div>`;
+  }else if(type==='flight'){
+    const isMil=milFlight(d.callsign);
+    h=`<div class="dtitle" style="color:${isMil?'#f5a070':'#00d4aa'}">✈ ${esc(d.callsign||'UNKNOWN')}${isMil?` <span style="font-size:9px;padding:1px 6px;border-radius:2px;background:rgba(245,111,35,.15);color:#f56f23">MILITARY</span>`:''}</div>
+    <div class="dgrid">
+      <div><div class="dk">ICAO24</div><div class="dv">${d.icao24||'—'}</div></div>
+      <div><div class="dk">COUNTRY</div><div class="dv">${d.country||'?'}</div></div>
+      <div><div class="dk">ALTITUDE</div><div class="dv">${d.altitude?d.altitude.toLocaleString()+' ft':'—'}</div></div>
+      <div><div class="dk">SPEED</div><div class="dv">${d.speed||0} kn</div></div>
+      <div><div class="dk">HEADING</div><div class="dv">${d.heading||0}°</div></div>
+    </div>`;
+  }else if(type==='event'){
+    const sc=d.severity==='critical'?'#f53b3b':d.severity==='high'?'#f56f23':'#f5a623';
+    h=`<div class="dtitle" style="color:#f53b3b">⚠ ${esc(d.title||'Event')}</div>
+    <div class="dgrid">
+      <div><div class="dk">SEVERITY</div><div class="dv" style="color:${sc}">${(d.severity||'?').toUpperCase()}</div></div>
+      <div><div class="dk">TYPE</div><div class="dv">${(d.type||'?').toUpperCase()}</div></div>
+      <div><div class="dk">REGION</div><div class="dv">${(d.locationName||'?').toUpperCase()}</div></div>
+      <div><div class="dk">SCORE</div><div class="dv">${d.relevanceScore||0}/100</div></div>
+      <div><div class="dk">SHIPS NEAR</div><div class="dv" style="color:#1a9eff">${d.nearbyShips||0}</div></div>
+      <div><div class="dk">AIRCRAFT</div><div class="dv" style="color:#00d4aa">${d.nearbyFlights||0}</div></div>
+    </div>
+    ${d.url?`<div style="margin-top:8px;font-size:10px"><a href="${d.url}" target="_blank" style="color:#1a9eff">View source ↗</a></div>`:''}`;
+  }
+  el.innerHTML=h;
+  Q('#drawer').classList.add('open');
+}
+Q('#dcls').addEventListener('click',()=>Q('#drawer').classList.remove('open'));
+
+// ─── AI INTEL ──────────────────────────────────────────────
+function buildIntel(){
+  const el=Q('#intel');
+  const crit=S.events.filter(e=>e.severity==='critical').slice(0,3);
+  const high=S.events.filter(e=>e.severity==='high').slice(0,3);
+  const aisOff=S.ships.filter(s=>s.speed===0).length;
+  const milS=S.ships.filter(s=>s.type>=35&&s.type<=37).length;
+  const milF=S.flights.filter(f=>milFlight(f.callsign)).length;
+
+  let h=`<div class="idiv">Situation Summary</div>
+  <div class="icard">
+    <div class="it">Global Overview</div>
+    <div class="ib">
+      Tracking <b style="color:#1a9eff">${S.ships.length.toLocaleString()}</b> vessels (${milS} warships) 
+      and <b style="color:#00d4aa">${S.flights.length.toLocaleString()}</b> aircraft (${milF} military). 
+      <b style="color:#f53b3b">${S.events.length}</b> conflict events active. 
+      <b>${ZONES.filter(z=>z.i==='critical').length}</b> critical zones monitored.
+      ${aisOff>0?`<br/><span style="color:#f5a623">⚠ ${aisOff} vessel(s) with AIS blackout.</span>`:''}
+    </div>
+  </div>`;
+
+  if(crit.length){ h+=`<div class="idiv">Critical Alerts</div>`; crit.forEach(ev=>h+=icard(ev,Math.min(92,45+(ev.relevanceScore||0)*.5+(ev.nearbyShips||0)*5),'clo')); }
+  if(high.length){ h+=`<div class="idiv">High Priority</div>`; high.forEach(ev=>h+=icard(ev,Math.min(80,38+(ev.relevanceScore||0)*.4),'cmd')); }
+
+  if(aisOff>0) h+=`<div class="idiv">Anomalies</div>
+  <div class="icard">
+    <div class="it">AIS Blackout — ${aisOff} vessel(s)</div>
+    <div class="ib">Transponders disabled. Possible: GPS jamming, stealth operation, or technical failure.</div>
+    <div class="iconf"><span class="iclbl">Concern</span><div class="icbar"><div class="icfill cmd" style="width:55%"></div></div><span class="icpct">55%</span></div>
+  </div>`;
+
+  if(milF>0) h+=`<div class="idiv">Military Aviation</div>
+  <div class="icard">
+    <div class="it">${milF} Military Aircraft</div>
+    <div class="ib">Identified via callsign patterns. Activity near conflict zones may indicate ISR, posturing, or active operations.</div>
+    <div class="iconf"><span class="iclbl">Confidence</span><div class="icbar"><div class="icfill chi" style="width:72%"></div></div><span class="icpct">72%</span></div>
+  </div>`;
+
+  // News-based intel
+  const recentNews=S.news.slice(0,5);
+  if(recentNews.length){
+    h+=`<div class="idiv">Latest Intelligence (${new Date().toLocaleTimeString('en-US')})</div>`;
+    recentNews.forEach(n=>{
+      h+=`<div class="icard" style="cursor:pointer" onclick="clickNews('${esc(n.url||'')}',0,0)">
+        <div class="it" style="color:#8892a4;font-size:10px">${esc(n.source)} · ${ago(n.date)}</div>
+        <div class="ib" style="margin-bottom:0">${esc((n.title||n.text||'').slice(0,180))}</div>
+      </div>`;
+    });
+  }
+
+  el.innerHTML=h||'<div class="empty">Insufficient data</div>';
+}
+
+function icard(ev,conf,cls){
+  return `<div class="icard">
+    <div class="it">${(ev.locationName||'?').toUpperCase()} — ${(ev.type||'EVENT').toUpperCase()}</div>
+    <div class="ib">${ev.nearbyShips||0} vessels and ${ev.nearbyFlights||0} aircraft nearby. ${ev.count>1?`${ev.count} sources.`:'Single source.'} Severity: ${ev.severity}.</div>
+    <div class="iconf"><span class="iclbl">Confidence</span><div class="icbar"><div class="icfill ${cls}" style="width:${Math.round(conf)}%"></div></div><span class="icpct">${Math.round(conf)}%</span></div>
+  </div>`;
+}
+
+// ─── COMMUNITY ─────────────────────────────────────────────
+const DEMO=[
+  {id:1,t:'RC-135 SIGINT aircraft over eastern Ukraine 4h+ loiter — unusual duration for this area',ts:Date.now()-12*60000,v:23},
+  {id:2,t:'MT Pacific Glory AIS reappeared 40nm north of last known Hormuz position',ts:Date.now()-28*60000,v:15},
+  {id:3,t:'Multiple helicopters south of Kherson tracked on FlightRadar24 — no callsigns displayed',ts:Date.now()-45*60000,v:31},
+  {id:4,t:'Drone strike on infrastructure facility — second independent source not yet confirmed',ts:Date.now()-67*60000,v:8},
+  {id:5,t:'Unusual carrier group movement Eastern Mediterranean — possible posturing near Cyprus',ts:Date.now()-90*60000,v:44},
+  {id:6,t:'AIS jamming reported near Bab el-Mandeb — 3 commercial vessels affected per maritime tracker',ts:Date.now()-120*60000,v:19},
+];
+S.posts=[...DEMO];
+
+function renderCommunity(){
+  const el=Q('#cfeed');
+  el.innerHTML=S.posts.map(p=>`<div class="cpost">
+    <div class="cphdr"><span class="cpanon">Anon#${String(p.id).padStart(4,'0')}</span><span class="cptime">${ago(p.ts)}</span></div>
+    <div class="cptxt">${esc(p.t)}</div>
+    <div class="cpact"><button class="cpbtn" onclick="upv(${p.id})">▲ ${p.v}</button><button class="cpbtn">↩ Reply</button></div>
+  </div>`).join('');
+}
+
+window.upv=id=>{ const p=S.posts.find(x=>x.id===id); if(p){p.v++;renderCommunity();} };
+Q('#pbtn').addEventListener('click',()=>{
+  const inp=Q('#pinput'), t=inp.value.trim();
+  if(!t||t.length<10) return;
+  S.posts.unshift({id:Date.now(),t,ts:Date.now(),v:0});
+  inp.value=''; Q('#pchars').textContent='280'; renderCommunity();
+});
+Q('#pinput').addEventListener('input',function(){ Q('#pchars').textContent=280-this.value.length; });
+
+// ─── TABS & FILTERS & TOGGLES ──────────────────────────────
+QA('.tab').forEach(btn=>btn.addEventListener('click',()=>{
+  const id=btn.dataset.tab;
+  QA('.tab').forEach(t=>t.classList.remove('on'));
+  QA('.panel').forEach(p=>p.classList.remove('on'));
+  btn.classList.add('on');
+  Q(`#panel-${id}`)?.classList.add('on');
+  if(id==='community') renderCommunity();
+}));
+
+QA('.ff').forEach(btn=>btn.addEventListener('click',()=>{
+  QA('.ff').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  S.trust=btn.dataset.trust;
+  renderFeed();
+  if(S.translated) doTranslate();
+}));
+
+QA('.hbtn[data-ly]').forEach(btn=>btn.addEventListener('click',()=>{
+  const l=btn.dataset.ly;
+  btn.classList.toggle('on');
+  S.layers[l]=btn.classList.contains('on');
+  if(S.layers[l]) map.addLayer(GL[l]); else map.removeLayer(GL[l]);
+}));
+
+Q('#bzones').addEventListener('click',function(){
+  this.classList.toggle('on');
+  S.layers.zones=this.classList.contains('on');
+  if(S.layers.zones) map.addLayer(GL.zones); else map.removeLayer(GL.zones);
+});
+
+Q('#vsrch').addEventListener('input',renderVessels);
+
+// ─── STATUS HELPERS ────────────────────────────────────────
+function setStatus(state,msg){
+  const d=Q('#sdot'),t=Q('#stxt');
+  if(d) d.className=state;
+  if(t) t.textContent=msg;
+}
+function setUpdated(){
+  const e=Q('#lupd');
+  if(e) e.textContent=`Updated ${new Date().toLocaleTimeString('en-US')}`;
+}
+setInterval(()=>{ S.online+=Math.floor(Math.random()*7)-3; S.online=Math.max(20,Math.min(400,S.online)); const e=Q('#online'); if(e) e.textContent=S.online; },9000);
+
+// ─── API ───────────────────────────────────────────────────
+async function apiFetch(path,fb=[]){
+  try{
+    const r=await fetch(API+path,{signal:AbortSignal.timeout(9000)});
+    if(!r.ok) throw new Error(r.status);
+    return await r.json();
+  }catch(e){ console.warn('[API]',path,e.message); return fb; }
+}
+
+// ─── HELPERS ───────────────────────────────────────────────
+function ago(ts){
+  if(!ts) return '?';
+  const m=Math.floor((Date.now()-ts)/60000);
+  if(m<1) return 'just now';
+  if(m<60) return `${m}m ago`;
+  if(m<1440) return `${Math.floor(m/60)}h ago`;
+  return `${Math.floor(m/1440)}d ago`;
+}
+
+function getTags(text){
+  const lo=text.toLowerCase();
+  const M={'ukraine':'🇺🇦 Ukraine','russia':'🇷🇺 Russia','israel':'🇮🇱 Israel','gaza':'Gaza',
+    'iran':'Iran','red sea':'Red Sea','black sea':'Black Sea','hormuz':'Hormuz',
+    'missile':'Missile','drone':'Drone','airstrike':'Airstrike','explosion':'Explosion',
+    'nato':'NATO','taiwan':'Taiwan','china':'China','houthi':'Houthi','lebanon':'Lebanon',
+    'north korea':'N.Korea','myanmar':'Myanmar','sudan':'Sudan','syria':'Syria',
+    'attack':'Attack','war':'War','troops':'Troops','navy':'Naval','military':'Military'};
+  return Object.entries(M).filter(([k])=>lo.includes(k)).map(([,v])=>v).slice(0,4);
+}
+
+function stype(t){
+  if(!t) return 'Unknown';
+  if(t>=35&&t<=37) return 'Warship'; if(t>=70&&t<=79) return 'Cargo';
+  if(t>=80&&t<=89) return 'Tanker'; if(t>=60&&t<=69) return 'Passenger';
+  if(t===30) return 'Fishing'; return `Type ${t}`;
+}
+
+const MILS=['RRR','JAKE','COBRA','VIPER','EAGLE','REACH','FORTE','MAGIC','RCH','CNV',
+  'ZERO','BARON','GOLD','DARK','IRON','STEEL','GHOST','SAM','ROCKY','SKILL','SLAM',
+  'VMF','PAT','HKY','NATO','USAF','NAVY','ARMY','FORTE'];
+function milFlight(cs){ if(!cs) return false; const s=cs.trim().toUpperCase(); return MILS.some(p=>s.startsWith(p)); }
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+const Q=s=>document.querySelector(s);
+const QA=s=>document.querySelectorAll(s);
+
+// ─── INIT ──────────────────────────────────────────────────
+async function init(){
+  setStatus('load','Connecting...');
+  renderCommunity();
+
+  // Check backend
+  const ping=await apiFetch('/',null);
+  setStatus(ping?'live':'err', ping?'Live':'Demo mode');
+
+  // Load everything in parallel
+  await Promise.all([
+    loadShips(),
+    loadFlights(),
+    loadEvents(),
+    loadNews(),
+  ]);
+  setUpdated();
+
+  // Auto-refresh
+  setInterval(async()=>{ await loadShips(); setUpdated(); },     15000);
+  setInterval(async()=>{ await loadFlights(); },                 22000);
+  setInterval(async()=>{ await loadEvents(); },                  25000);
+  setInterval(async()=>{ await loadNews(); },                    45000); // news every 45s
+}
+
+init();
+</script>
 </body>
 </html>
