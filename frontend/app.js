@@ -1,664 +1,705 @@
-// app.js – Sentinel Intelligence v3.0
-// Improvements: Translation, Better Map, Fixed AIS/Flights, Conflict Zones
+// ═══════════════════════════════════════════════════════════
+// SENTINEL v3.1 — Complete Frontend
+// ═══════════════════════════════════════════════════════════
 
-// ─── CONFIG ───────────────────────────────────────────────────
-const API_URL = (function() {
-  const h = window.location.hostname;
-  if (h === "localhost" || h === "127.0.0.1") return "http://localhost:3001";
-  return "https://senitel-backend.onrender.com"; // ← change after deploy
+// ─── CONFIG ────────────────────────────────────────────────
+const API = (() => {
+  const h = location.hostname;
+  return (h === 'localhost' || h === '127.0.0.1')
+    ? 'http://localhost:3001'
+    : 'https://senitel-backend.onrender.com/'; // ← update after deploy
 })();
 
-const REFRESH = { feed: 30000, vessels: 15000, events: 20000 };
+const TICK = { vessels: 15000, events: 20000, news: 30000 };
 
-// ─── TRANSLATION STATE ────────────────────────────────────────
-const translate = {
-  active: false,
-  cache: new Map(),
-};
-
-// ─── APP STATE ────────────────────────────────────────────────
-const state = {
+// ─── STATE ─────────────────────────────────────────────────
+const S = {
   ships: [], flights: [], events: [], news: [],
-  currentTrust: "all",
+  trust: 'all',
   layers: { ships: true, flights: true, events: true, zones: true },
-  communityPosts: [],
-  onlineCount: Math.floor(Math.random() * 80) + 40,
+  posts: [],
+  online: 47 + Math.floor(Math.random() * 60),
+  translated: false,
+  translating: false,
+  xlateCache: new Map(),      // original → translated
 };
 
-// ─── MAP SETUP ────────────────────────────────────────────────
-const map = L.map("map", {
+// ─── MAP ───────────────────────────────────────────────────
+const map = L.map('map', {
   zoomControl: false,
   attributionControl: false,
   preferCanvas: true,
-}).setView([30, 25], 3);
+}).setView([25, 20], 3);
 
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-  maxZoom: 19, opacity: 0.9,
+// Carto Dark — beautiful dark basemap, no CSS filter needed
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  maxZoom: 19, subdomains: 'abcd', opacity: 0.92,
 }).addTo(map);
 
-L.control.zoom({ position: "bottomright" }).addTo(map);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-const shipLayer   = L.markerClusterGroup({ maxClusterRadius: 50, disableClusteringAtZoom: 6, chunkedLoading: true });
-const flightLayer = L.markerClusterGroup({ maxClusterRadius: 40, disableClusteringAtZoom: 7, chunkedLoading: true });
-const eventLayer  = L.layerGroup();
-const zoneLayer   = L.layerGroup();
+const GL = {
+  ships:   L.markerClusterGroup({ maxClusterRadius: 50, disableClusteringAtZoom: 6, chunkedLoading: true }),
+  flights: L.markerClusterGroup({ maxClusterRadius: 40, disableClusteringAtZoom: 7, chunkedLoading: true }),
+  events:  L.layerGroup(),
+  zones:   L.layerGroup(),
+};
+Object.values(GL).forEach(l => map.addLayer(l));
 
-map.addLayer(shipLayer);
-map.addLayer(flightLayer);
-map.addLayer(eventLayer);
-map.addLayer(zoneLayer);
-
-// ─── CONFLICT ZONES ────────────────────────────────────────────
-const CONFLICT_ZONES = [
-  { name: "Ukraine War", lat: 49.0, lon: 32.0, radius: 350000, color: "#ff3b3b", intensity: "critical" },
-  { name: "Gaza Strip", lat: 31.4, lon: 34.4, radius: 40000, color: "#ff6b00", intensity: "critical" },
-  { name: "Red Sea (Houthi)", lat: 15.5, lon: 42.5, radius: 280000, color: "#ffaa00", intensity: "high" },
-  { name: "Strait of Hormuz", lat: 26.6, lon: 56.3, radius: 80000, color: "#ffaa00", intensity: "high" },
-  { name: "Taiwan Strait", lat: 24.5, lon: 119.5, radius: 150000, color: "#ffaa00", intensity: "elevated" },
-  { name: "South China Sea", lat: 12.0, lon: 114.0, radius: 500000, color: "#ffe066", intensity: "elevated" },
-  { name: "Lebanon Border", lat: 33.1, lon: 35.5, radius: 60000, color: "#ff6b00", intensity: "high" },
-  { name: "Sudan Civil War", lat: 15.5, lon: 32.5, radius: 280000, color: "#ff9944", intensity: "high" },
-  { name: "Black Sea", lat: 45.5, lon: 32.5, radius: 220000, color: "#ff4466", intensity: "high" },
-  { name: "Sahel Region", lat: 15.0, lon: 1.0, radius: 600000, color: "#ffe066", intensity: "elevated" },
-  { name: "North Korea", lat: 38.3, lon: 127.5, radius: 100000, color: "#ffe066", intensity: "elevated" },
-  { name: "Syria", lat: 35.0, lon: 38.5, radius: 200000, color: "#ff9944", intensity: "high" },
+// ─── CONFLICT ZONES ────────────────────────────────────────
+const ZONES = [
+  // CRITICAL
+  { n:'Ukraine War',          lat:49.0, lon:32.0, r:370000, c:'#ff2222', i:'critical' },
+  { n:'Gaza / West Bank',     lat:31.5, lon:34.6, r:45000,  c:'#ff4400', i:'critical' },
+  // HIGH
+  { n:'Red Sea / Houthi',     lat:14.5, lon:42.5, r:320000, c:'#ff6600', i:'high' },
+  { n:'Lebanon-Israel',       lat:33.2, lon:35.5, r:65000,  c:'#ff6600', i:'high' },
+  { n:'Black Sea',            lat:45.5, lon:32.5, r:230000, c:'#ff4455', i:'high' },
+  { n:'Strait of Hormuz',     lat:26.6, lon:56.3, r:85000,  c:'#ffaa00', i:'high' },
+  { n:'Sudan Civil War',      lat:15.5, lon:32.5, r:300000, c:'#ff8800', i:'high' },
+  { n:'Syria',                lat:35.0, lon:38.5, r:210000, c:'#ff7700', i:'high' },
+  // ELEVATED
+  { n:'Taiwan Strait',        lat:24.5, lon:119.5,r:160000, c:'#ffcc00', i:'elevated' },
+  { n:'South China Sea',      lat:12.0, lon:114.0,r:550000, c:'#ffcc00', i:'elevated' },
+  { n:'North Korea Border',   lat:38.3, lon:127.5,r:110000, c:'#ffcc00', i:'elevated' },
+  { n:'Sahel Region',         lat:15.0, lon:1.0,  r:700000, c:'#ddaa00', i:'elevated' },
+  { n:'Ethiopia / Horn',      lat:9.0,  lon:40.0, r:280000, c:'#ddaa00', i:'elevated' },
+  { n:'Bab el-Mandeb',        lat:12.5, lon:43.3, r:75000,  c:'#ffaa00', i:'elevated' },
+  { n:'Aegean / Turkey-Greece',lat:39.5,lon:25.5, r:120000, c:'#ddaa00', i:'elevated' },
+  { n:'Myanmar Civil War',    lat:19.5, lon:96.0, r:250000, c:'#ddaa00', i:'elevated' },
 ];
 
-const ZONE_OPACITY = { critical: 0.16, high: 0.11, elevated: 0.07 };
-const ZONE_BORDER  = { critical: 0.7,  high: 0.5,  elevated: 0.3  };
+const ZOP  = { critical:.18, high:.12, elevated:.07 };
+const ZBOR = { critical:.75, high:.55, elevated:.3  };
+const ZDSH = { critical:null, high:null, elevated:'6 4' };
 
-function drawConflictZones() {
-  zoneLayer.clearLayers();
-  CONFLICT_ZONES.forEach(zone => {
-    const circle = L.circle([zone.lat, zone.lon], {
-      radius: zone.radius,
-      color: zone.color,
-      fillColor: zone.color,
-      fillOpacity: ZONE_OPACITY[zone.intensity] || 0.08,
-      weight: 1.5,
-      opacity: ZONE_BORDER[zone.intensity] || 0.4,
-      dashArray: zone.intensity === "elevated" ? "6 4" : null,
+function drawZones() {
+  GL.zones.clearLayers();
+  ZONES.forEach(z => {
+    const c = L.circle([z.lat, z.lon], {
+      radius: z.r,
+      color: z.c, fillColor: z.c,
+      fillOpacity: ZOP[z.i] || .08,
+      weight: 1.5, opacity: ZBOR[z.i] || .4,
+      dashArray: ZDSH[z.i],
     });
-
-    circle.bindTooltip(
-      `<div style="background:rgba(8,10,14,0.95);border:1px solid ${zone.color}55;padding:4px 10px;
-        border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:10px;color:${zone.color};
-        white-space:nowrap;letter-spacing:0.04em">
-        <span style="opacity:0.55;font-size:8px;display:block;text-transform:uppercase;letter-spacing:0.1em">${zone.intensity}</span>
-        ${zone.name}
-      </div>`,
-      { permanent: true, direction: "center", className: "zone-label-tip", offset: [0, 0] }
-    );
-    circle.addTo(zoneLayer);
+    c.bindTooltip(`<span style="color:${z.c};font-size:9px;font-weight:600;letter-spacing:.05em">
+        <span style="opacity:.55;font-size:8px;display:block;text-transform:uppercase">${z.i}</span>${z.n}
+      </span>`, { permanent: true, direction: 'center', className: 'ztip' });
+    GL.zones.addLayer(c);
   });
 }
-drawConflictZones();
+drawZones();
 
-// ─── MARKER ICONS ─────────────────────────────────────────────
-function makeIcon(type, sub) {
-  if (type === "ship") {
-    const color = sub === "military" ? "#0e9eff" : sub === "unknown" ? "#666" : "#5599dd";
-    return L.divIcon({
-      html: `<div style="width:10px;height:10px;border-radius:50%;background:${color};
-        border:1.5px solid ${color}99;box-shadow:0 0 ${sub==="military"?"8px":"4px"} ${color}77"></div>`,
-      className: "", iconSize: [10,10], iconAnchor: [5,5],
-    });
+// ─── ICONS ─────────────────────────────────────────────────
+function icon(type, sub) {
+  let html = '';
+  if (type === 'ship') {
+    const col = sub === 'mil' ? '#0e9eff' : sub === 'unk' ? '#556' : '#4488bb';
+    const glow = sub === 'mil' ? '0 0 8px ' + col + '88' : '0 0 4px ' + col + '55';
+    html = `<div style="width:10px;height:10px;border-radius:50%;background:${col};
+      border:1.5px solid ${col}88;box-shadow:${glow}"></div>`;
+  } else if (type === 'flight') {
+    const col = sub === 'mil' ? '#ff7700' : '#00d4aa';
+    html = `<div style="width:9px;height:9px;background:${col};transform:rotate(45deg);
+      border:1.5px solid ${col}88;box-shadow:0 0 6px ${col}66"></div>`;
+  } else if (type === 'event') {
+    const col = sub === 'critical' ? '#ff2222' : sub === 'high' ? '#ff5500' : '#ffaa00';
+    html = `<div style="width:13px;height:13px;border-radius:50%;background:${col};
+      border:2px solid ${col}55;box-shadow:0 0 10px ${col}88;animation:blink 1.5s infinite"></div>`;
   }
-  if (type === "flight") {
-    const color = sub === "military" ? "#ff7700" : "#00d4aa";
-    return L.divIcon({
-      html: `<div style="width:9px;height:9px;background:${color};transform:rotate(45deg);
-        border:1.5px solid ${color}99;box-shadow:0 0 6px ${color}77"></div>`,
-      className: "", iconSize: [10,10], iconAnchor: [5,5],
-    });
-  }
-  if (type === "event") {
-    const color = sub === "critical" ? "#ff2222" : sub === "high" ? "#ff5500" : "#ffaa00";
-    return L.divIcon({
-      html: `<div style="width:13px;height:13px;border-radius:50%;background:${color};
-        border:2px solid ${color}66;box-shadow:0 0 10px ${color}99;animation:pulse-anim 1.5s infinite"></div>`,
-      className: "", iconSize: [13,13], iconAnchor: [6,6],
-    });
-  }
+  return L.divIcon({ html, className: '', iconSize: [13,13], iconAnchor: [6,6] });
 }
 
-// ─── TRANSLATION ──────────────────────────────────────────────
-async function translateText(text) {
-  if (!text || text.length < 5) return text;
-  const key = text.slice(0, 120);
-  if (translate.cache.has(key)) return translate.cache.get(key);
-  if (isLikelyEnglish(text)) { translate.cache.set(key, text); return text; }
+// ─── TRANSLATION ───────────────────────────────────────────
+// Translation is done via the BACKEND proxy endpoint /translate
+// This avoids CORS issues and keeps the API key server-side if needed.
+// Falls back to MyMemory public API if backend not available.
+
+async function xlate(text) {
+  if (!text || text.trim().length < 4) return text;
+  const key = text.slice(0, 200);
+  if (S.xlateCache.has(key)) return S.xlateCache.get(key);
+
+  // Try backend proxy first
   try {
-    const res = await fetch(
-      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.slice(0,500))}&langpair=auto|en`,
-      { signal: AbortSignal.timeout(6000) }
+    const r = await fetch(`${API}/translate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text.slice(0, 500) }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.translation) {
+        S.xlateCache.set(key, d.translation);
+        return d.translation;
+      }
+    }
+  } catch (_) {}
+
+  // Fallback: MyMemory public API (detect language → EN)
+  try {
+    const encoded = encodeURIComponent(text.slice(0, 450));
+    // Use explicit langpair detection: try common non-English sources
+    const r = await fetch(
+      `https://api.mymemory.translated.net/get?q=${encoded}&langpair=ru|en`,
+      { signal: AbortSignal.timeout(7000) }
     );
-    const data = await res.json();
-    if (data.responseStatus === 200 && data.responseData?.translatedText) {
-      const result = data.responseData.translatedText;
-      translate.cache.set(key, result);
+    const d = await r.json();
+    if (d.responseStatus === 200) {
+      const t = d.responseData?.translatedText || text;
+      // MyMemory sometimes returns same text if already English
+      const result = t && t !== text ? t : text;
+      S.xlateCache.set(key, result);
       return result;
     }
-  } catch(e) {}
+  } catch (_) {}
+
   return text;
 }
 
-function isLikelyEnglish(text) {
-  const eng = ["the","a","is","in","of","to","and","that","it","for","on","are","with","was","has","have","been","will","report","attack","forces","near","after","during","said","over","under","military"];
-  const words = text.toLowerCase().split(/\s+/);
-  return words.filter(w => eng.includes(w)).length / words.length > 0.06;
-}
+// Translate all visible feed items with progress bar
+async function translateFeed() {
+  const list = document.getElementById('feed');
+  const items = list.querySelectorAll('.ftext[data-orig]');
+  if (!items.length) return;
 
-async function activateTranslation() {
-  const items = document.querySelectorAll(".feed-text[data-original]");
-  let i = 0;
-  for (const el of items) {
-    el.style.opacity = "0.5";
-    const translated = await translateText(el.getAttribute("data-original") || "");
-    el.textContent = translated;
-    el.style.opacity = "1";
-    el.style.color = "#66ccff";
-    i++;
-    // Small yield every 5 items to not freeze UI
-    if (i % 5 === 0) await new Promise(r => setTimeout(r, 10));
+  // Show progress bar
+  let prog = list.querySelector('.translate-progress');
+  if (!prog) {
+    prog = document.createElement('div');
+    prog.className = 'translate-progress';
+    prog.innerHTML = `<span id="tp-txt">Translating...</span><div class="tp-bar"><div class="tp-fill" id="tp-fill" style="width:0%"></div></div><span id="tp-done">0/${items.length}</span>`;
+    list.prepend(prog);
   }
+
+  let done = 0;
+  for (const el of items) {
+    const orig = el.getAttribute('data-orig');
+    el.classList.add('translating');
+    const result = await xlate(orig);
+    el.textContent = result;
+    el.classList.remove('translating');
+    el.classList.add('translated');
+    done++;
+    const pct = Math.round(done / items.length * 100);
+    document.getElementById('tp-fill').style.width = pct + '%';
+    document.getElementById('tp-done').textContent = `${done}/${items.length}`;
+    // Tiny yield every 3 items to keep UI responsive
+    if (done % 3 === 0) await new Promise(r => setTimeout(r, 0));
+  }
+
+  document.getElementById('tp-txt').textContent = '✓ Translated to English';
+  setTimeout(() => prog.remove(), 3000);
 }
 
-function deactivateTranslation() {
-  document.querySelectorAll(".feed-text[data-original]").forEach(el => {
-    el.textContent = el.getAttribute("data-original") || "";
-    el.style.color = "";
+function restoreFeed() {
+  document.querySelectorAll('.ftext[data-orig]').forEach(el => {
+    el.textContent = el.getAttribute('data-orig');
+    el.classList.remove('translated', 'translating');
   });
 }
 
-function initTranslateButton() {
-  const btn = document.getElementById("translate-btn");
-  if (!btn) return;
-  btn.addEventListener("click", async () => {
-    translate.active = !translate.active;
-    if (translate.active) {
-      btn.innerHTML = `🌐 EN <span class="tgl-on">ON</span>`;
-      btn.classList.add("active");
-      btn.disabled = true;
-      setStatus("loading", "Translating...");
-      await activateTranslation();
-      setStatus("online", "Live");
-      btn.disabled = false;
+// ─── TRANSLATE BUTTON ──────────────────────────────────────
+function initTranslate() {
+  const btn = document.getElementById('btn-translate');
+  const lbl = document.getElementById('tgl-label');
+
+  btn.addEventListener('click', async () => {
+    if (S.translating) return;
+
+    S.translated = !S.translated;
+
+    if (S.translated) {
+      btn.classList.add('on', 'loading');
+      lbl.textContent = 'ON';
+      S.translating = true;
+      await translateFeed();
+      S.translating = false;
+      btn.classList.remove('loading');
     } else {
-      btn.innerHTML = `🌐 Translate <span class="tgl-off">OFF</span>`;
-      btn.classList.remove("active");
-      deactivateTranslation();
+      btn.classList.remove('on', 'loading');
+      lbl.textContent = 'OFF';
+      restoreFeed();
     }
   });
 }
 
-// ─── SHIPS ────────────────────────────────────────────────────
+// ─── SHIPS ─────────────────────────────────────────────────
 async function loadShips() {
-  const data = await apiFetch("/ships", []);
-  state.ships = data;
-  shipLayer.clearLayers();
-  if (!state.layers.ships) return;
+  const data = await get('/ships') || [];
+  S.ships = data;
+  GL.ships.clearLayers();
+  if (!S.layers.ships) return;
 
   let n = 0;
-  for (const ship of data) {
-    if (!ship.lat || !ship.lon || n > 500) break;
+  for (const s of data) {
+    if (!s.lat || !s.lon || n >= 600) break;
     n++;
-    const isMil = ship.type >= 35 && ship.type <= 37;
-    const sub = isMil ? "military" : (!ship.type || ship.type === 0) ? "unknown" : "cargo";
-    const marker = L.marker([ship.lat, ship.lon], { icon: makeIcon("ship", sub) });
-    marker.bindPopup(buildShipPopup(ship, isMil), { maxWidth: 260 });
-    marker.on("click", () => showDetail("ship", ship));
-    shipLayer.addLayer(marker);
+    const isMil = s.type >= 35 && s.type <= 37;
+    const sub = isMil ? 'mil' : (!s.type || s.type === 0) ? 'unk' : 'cargo';
+    const m = L.marker([s.lat, s.lon], { icon: icon('ship', sub) });
+    m.bindPopup(shipPopup(s, isMil), { maxWidth: 260 });
+    m.on('click', () => openDrawer('ship', s));
+    GL.ships.addLayer(m);
   }
-  document.getElementById("count-ships").textContent = data.length.toLocaleString();
-  renderVesselList();
+  qs('#cnt-ships').textContent = data.length.toLocaleString();
+  renderVessels();
 }
 
-function buildShipPopup(ship, isMil) {
-  return `<div style="padding:10px 12px;min-width:200px;font-family:'JetBrains Mono',monospace">
-    <div style="font-size:12px;font-weight:600;color:${isMil?"#0e9eff":"#5599dd"};margin-bottom:8px">
-      ⚓ ${escHtml(ship.name||"UNKNOWN")}${isMil?` <span style="font-size:8px;background:rgba(14,158,255,0.15);color:#0e9eff;padding:1px 5px;border-radius:2px">WARSHIP</span>`:""}
+function shipPopup(s, isMil) {
+  const col = isMil ? '#0e9eff' : '#4488bb';
+  const tag = isMil ? `<span class="popup-tag" style="background:rgba(14,158,255,.15);color:#0e9eff;border:1px solid rgba(14,158,255,.3)">WARSHIP</span>` : '';
+  return `<div class="popup">
+    <div class="popup-title" style="color:${col}">⚓ ${esc(s.name || 'UNKNOWN')} ${tag}</div>
+    <div class="popup-grid">
+      <span class="pk">MMSI</span><span class="pv">${s.mmsi || '—'}</span>
+      <span class="pk">TYPE</span><span class="pv">${stype(s.type)}</span>
+      <span class="pk">SPEED</span><span class="pv" style="color:${s.speed===0?'#ffaa00':'#00cc66'}">${(s.speed||0).toFixed(1)} kn${s.speed===0?' ⚠':''}</span>
+      <span class="pk">HEADING</span><span class="pv">${s.heading||0}°</span>
+      <span class="pk">POSITION</span><span class="pv">${(s.lat||0).toFixed(2)}, ${(s.lon||0).toFixed(2)}</span>
     </div>
-    <div style="display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:10px">
-      <span style="color:#555c66">MMSI</span><span>${ship.mmsi||"—"}</span>
-      <span style="color:#555c66">TYPE</span><span>${shipTypeName(ship.type)}</span>
-      <span style="color:#555c66">SPEED</span><span style="color:${ship.speed===0?"#ffaa00":"#00cc66"}">${(ship.speed||0).toFixed(1)} kn ${ship.speed===0?"⚠ STOPPED":""}</span>
-      <span style="color:#555c66">HDG</span><span>${ship.heading||0}°</span>
-    </div>
-    ${ship.nearbyEvents?`<div style="margin-top:8px;font-size:10px;color:#ffaa00">⚠ ${ship.nearbyEvents} event(s) nearby</div>`:""}
+    ${s.nearbyEvents ? `<div style="margin-top:8px;font-size:10px;color:#ffaa00">⚠ ${s.nearbyEvents} event(s) nearby</div>` : ''}
   </div>`;
 }
 
-function shipTypeName(t) {
-  if (!t) return "Unknown";
-  if (t>=35&&t<=37) return "Warship";
-  if (t>=70&&t<=79) return "Cargo";
-  if (t>=80&&t<=89) return "Tanker";
-  if (t>=60&&t<=69) return "Passenger";
-  if (t===30) return "Fishing";
+function stype(t) {
+  if (!t) return 'Unknown';
+  if (t>=35&&t<=37) return 'Warship';
+  if (t>=70&&t<=79) return 'Cargo';
+  if (t>=80&&t<=89) return 'Tanker';
+  if (t>=60&&t<=69) return 'Passenger';
+  if (t===30) return 'Fishing';
   return `Type ${t}`;
 }
 
-// ─── FLIGHTS ──────────────────────────────────────────────────
+// ─── FLIGHTS ───────────────────────────────────────────────
 async function loadFlights() {
-  const data = await apiFetch("/flights", []);
-  state.flights = data;
-  flightLayer.clearLayers();
-  if (!state.layers.flights) return;
+  const data = await get('/flights') || [];
+  S.flights = data;
+  GL.flights.clearLayers();
+  if (!S.layers.flights) return;
 
   let n = 0;
-  for (const flight of data) {
-    if (!flight.lat || !flight.lon || n > 600) break;
+  for (const f of data) {
+    if (!f.lat || !f.lon || n >= 700) break;
     n++;
-    const isMil = isMilitaryFlight(flight.callsign, flight.country);
-    const marker = L.marker([flight.lat, flight.lon], { icon: makeIcon("flight", isMil ? "military" : "civil") });
-    marker.bindPopup(buildFlightPopup(flight, isMil), { maxWidth: 240 });
-    marker.on("click", () => showDetail("flight", flight));
-    flightLayer.addLayer(marker);
+    const isMil = milFlight(f.callsign);
+    const m = L.marker([f.lat, f.lon], { icon: icon('flight', isMil ? 'mil' : 'civ') });
+    m.bindPopup(flightPopup(f, isMil), { maxWidth: 240 });
+    m.on('click', () => openDrawer('flight', f));
+    GL.flights.addLayer(m);
   }
-  document.getElementById("count-flights").textContent = data.length.toLocaleString();
-  renderVesselList();
+  qs('#cnt-flights').textContent = data.length.toLocaleString();
+  renderVessels();
 }
 
-function buildFlightPopup(f, isMil) {
-  return `<div style="padding:10px 12px;min-width:200px;font-family:'JetBrains Mono',monospace">
-    <div style="font-size:12px;font-weight:600;color:${isMil?"#ff7700":"#00d4aa"};margin-bottom:8px">
-      ✈ ${escHtml(f.callsign||"UNKNOWN")}${isMil?` <span style="font-size:8px;background:rgba(255,119,0,0.15);color:#ff7700;padding:1px 5px;border-radius:2px">MILITARY</span>`:""}
-    </div>
-    <div style="display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:10px">
-      <span style="color:#555c66">COUNTRY</span><span>${f.country||"?"}</span>
-      <span style="color:#555c66">ALT</span><span>${f.altitude?Math.round(f.altitude).toLocaleString()+" ft":"—"}</span>
-      <span style="color:#555c66">SPEED</span><span>${f.speed||"—"} kn</span>
-      <span style="color:#555c66">HDG</span><span>${f.heading||0}°</span>
+function flightPopup(f, isMil) {
+  const col = isMil ? '#ff7700' : '#00d4aa';
+  const tag = isMil ? `<span class="popup-tag" style="background:rgba(255,119,0,.15);color:#ff7700;border:1px solid rgba(255,119,0,.3)">MILITARY</span>` : '';
+  return `<div class="popup">
+    <div class="popup-title" style="color:${col}">✈ ${esc(f.callsign||'UNKNOWN')} ${tag}</div>
+    <div class="popup-grid">
+      <span class="pk">COUNTRY</span><span class="pv">${f.country||'?'}</span>
+      <span class="pk">ALTITUDE</span><span class="pv">${f.altitude ? f.altitude.toLocaleString()+' ft' : '—'}</span>
+      <span class="pk">SPEED</span><span class="pv">${f.speed||'—'} kn</span>
+      <span class="pk">HEADING</span><span class="pv">${f.heading||0}°</span>
+      <span class="pk">ICAO24</span><span class="pv">${f.icao24||'—'}</span>
     </div>
   </div>`;
 }
 
-function isMilitaryFlight(cs, country) {
+const MIL_PFXS = ['RRR','JAKE','COBRA','VIPER','EAGLE','REACH','FORTE','MAGIC','RCH',
+  'CNV','ZERO','BARON','GOLD','DARK','IRON','STEEL','GHOST','SAM','ROCKY','SKILL',
+  'SLAM','VMF','PAT','HKY','NATO','USAF','NAVY','ARMY'];
+
+function milFlight(cs) {
   if (!cs) return false;
   const s = cs.trim().toUpperCase();
-  return ["RRR","JAKE","COBRA","VIPER","EAGLE","REACH","FORTE","MAGIC","NATO","RCH",
-    "CNV","ZERO","BARON","GOLD","DARK","IRON","STEEL","GHOST","SAM","ROCKY",
-    "SKILL","SLAM","VMF","PAT","HKY"].some(p => s.startsWith(p));
+  return MIL_PFXS.some(p => s.startsWith(p));
 }
 
-// ─── EVENTS ───────────────────────────────────────────────────
+// ─── EVENTS ────────────────────────────────────────────────
 async function loadEvents() {
-  const data = await apiFetch("/events", []);
-  state.events = data;
-  eventLayer.clearLayers();
-  if (!state.layers.events) return;
+  const data = await get('/events') || [];
+  S.events = data;
+  GL.events.clearLayers();
+  if (!S.layers.events) return;
 
   data.forEach(ev => {
     if (!ev.lat || !ev.lon) return;
-    const marker = L.marker([ev.lat, ev.lon], { icon: makeIcon("event", ev.severity) });
-    const tc = ev.trust==="verified"?"#00cc66":ev.trust==="propaganda"?"#ff3b3b":"#ffaa00";
-    const tl = ev.trust==="verified"?"✓ VERIFIED":ev.trust==="propaganda"?"⚑ PROPAGANDA":"~ UNVERIFIED";
-    marker.bindPopup(`
-      <div style="padding:10px 12px;min-width:220px;font-family:'JetBrains Mono',monospace">
-        <div style="font-size:11px;font-weight:600;color:#ff5533;margin-bottom:8px;padding-right:16px">⚠ ${escHtml(ev.title||"Event")}</div>
-        <div style="display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:10px">
-          <span style="color:#555c66">REGION</span><span>${(ev.locationName||"?").toUpperCase()}</span>
-          <span style="color:#555c66">SEVERITY</span><span style="color:${ev.severity==="critical"?"#ff2222":ev.severity==="high"?"#ff5500":"#ffaa00"}">${(ev.severity||"?").toUpperCase()}</span>
-          <span style="color:#555c66">TYPE</span><span>${(ev.type||"?").toUpperCase()}</span>
-          <span style="color:#555c66">SHIPS NEAR</span><span style="color:#0e9eff">${ev.nearbyShips||0}</span>
-          <span style="color:#555c66">AIRCRAFT</span><span style="color:#00d4aa">${ev.nearbyFlights||0}</span>
-        </div>
-        <div style="margin-top:8px;padding:3px 8px;border-radius:2px;
-          background:${tc}18;border:1px solid ${tc}44;font-size:9px;color:${tc};
-          font-weight:600;letter-spacing:0.08em">${tl}</div>
-        ${ev.url?`<div style="margin-top:6px;font-size:10px"><a href="${ev.url}" target="_blank" style="color:#0e9eff">Source ↗</a></div>`:""}
-      </div>`, { maxWidth: 280 });
-    marker.on("click", () => showDetail("event", ev));
-    eventLayer.addLayer(marker);
+    const m = L.marker([ev.lat, ev.lon], { icon: icon('event', ev.severity) });
+    m.bindPopup(evPopup(ev), { maxWidth: 280 });
+    m.on('click', () => openDrawer('event', ev));
+    GL.events.addLayer(m);
   });
 
-  document.getElementById("count-events").textContent = data.length;
-  buildIntelCards();
+  qs('#cnt-events').textContent = data.length;
+  buildIntel();
 }
 
-// ─── NEWS FEED ────────────────────────────────────────────────
+function evPopup(ev) {
+  const tc = ev.trust==='verified'?'#00cc66':ev.trust==='propaganda'?'#ff3b3b':'#ffaa00';
+  const tl = ev.trust==='verified'?'✓ VERIFIED':ev.trust==='propaganda'?'⚑ PROPAGANDA':'~ UNVERIFIED';
+  const sc = ev.severity==='critical'?'#ff2222':ev.severity==='high'?'#ff5500':'#ffaa00';
+  return `<div class="popup">
+    <div class="popup-title" style="color:#ff5533">⚠ ${esc(ev.title||'Unknown Event')}</div>
+    <div class="popup-grid">
+      <span class="pk">REGION</span><span class="pv">${(ev.locationName||'?').toUpperCase()}</span>
+      <span class="pk">SEVERITY</span><span class="pv" style="color:${sc}">${(ev.severity||'?').toUpperCase()}</span>
+      <span class="pk">TYPE</span><span class="pv">${(ev.type||'?').toUpperCase()}</span>
+      <span class="pk">SCORE</span><span class="pv">${ev.relevanceScore||0}/100</span>
+      <span class="pk">SHIPS NEAR</span><span class="pv" style="color:#0e9eff">${ev.nearbyShips||0}</span>
+      <span class="pk">AIRCRAFT</span><span class="pv" style="color:#00d4aa">${ev.nearbyFlights||0}</span>
+    </div>
+    <span class="popup-tag" style="background:${tc}18;color:${tc};border:1px solid ${tc}44">${tl}</span>
+    ${ev.url?`<a class="popup-link" href="${ev.url}" target="_blank">View source ↗</a>`:''}
+  </div>`;
+}
+
+// ─── NEWS FEED ─────────────────────────────────────────────
 async function loadNews() {
-  const data = await apiFetch("/news?limit=60", []);
-  state.news = data;
+  const data = await get('/news?limit=60') || [];
+  S.news = data;
   renderFeed();
+  // Re-translate if active
+  if (S.translated) await translateFeed();
 }
 
 function renderFeed() {
-  const list = document.getElementById("feed-list");
-  const filtered = state.currentTrust === "all"
-    ? state.news
-    : state.news.filter(n => n.trust === state.currentTrust);
+  const el = qs('#feed');
+  const filtered = S.trust === 'all' ? S.news : S.news.filter(n => n.trust === S.trust);
 
-  if (!filtered.length) {
-    list.innerHTML = `<div class="loading-msg">No news available</div>`;
-    return;
-  }
+  if (!filtered.length) { el.innerHTML = '<div class="empty">No news available</div>'; return; }
 
-  list.innerHTML = filtered.slice(0, 50).map(item => {
-    const tl = item.trust==="verified"?"✓ VERIFIED":item.trust==="propaganda"?"⚑ PROPAGANDA":"~ UNVERIFIED";
-    const text = escHtml(item.title || item.text || "");
-    const tags = extractTags(item.text || item.title || "");
-    return `<div class="feed-item" onclick="feedClick('${encodeURIComponent(item.url||"")}',${item.lat||0},${item.lon||0})">
-      <div class="feed-meta">
-        <span class="trust-badge trust-${item.trust||"unverified"}">${tl}</span>
-        <span class="feed-source">${item.type==="telegram"?"📨 ":"📰 "}${escHtml(item.sourceLabel||item.source||"")}</span>
-        <span class="feed-time">${formatTimeAgo(item.date)}</span>
+  el.innerHTML = filtered.slice(0, 50).map(item => {
+    const tl = item.trust==='verified'?'✓ VERIFIED':item.trust==='propaganda'?'⚑ PROPAGANDA':'~ UNVERIFIED';
+    const text = esc(item.title || item.text || '');
+    const tags = extractTags(item.text || item.title || '');
+    return `<div class="fi" onclick="clickFeed('${encodeURIComponent(item.url||'')}',${item.lat||0},${item.lon||0})">
+      <div class="fi-meta">
+        <span class="tbadge t-${item.trust||'unverified'}">${tl}</span>
+        <span class="fsrc">${item.type==='telegram'?'📨 ':'📰 '}${esc(item.sourceLabel||item.source||'')}</span>
+        <span class="ftime">${ago(item.date)}</span>
       </div>
-      <div class="feed-text" data-original="${text}">${text}</div>
-      <div class="feed-tags">${tags.map(t=>`<span class="feed-tag">${t}</span>`).join("")}</div>
+      <div class="ftext" data-orig="${text}">${text}</div>
+      <div class="ftags">${tags.map(t=>`<span class="ftag">${t}</span>`).join('')}</div>
     </div>`;
-  }).join("");
-
-  // Re-apply translations if active
-  if (translate.active) activateTranslation();
+  }).join('');
 }
 
-window.feedClick = function(url, lat, lon) {
-  const u = decodeURIComponent(url);
+window.clickFeed = (enc, lat, lon) => {
+  const url = decodeURIComponent(enc);
   if (lat && lon) map.flyTo([lat, lon], 6, { duration: 1.2 });
-  if (u) window.open(u, "_blank");
+  if (url) window.open(url, '_blank');
 };
 
-// ─── VESSEL LIST ──────────────────────────────────────────────
-function renderVesselList() {
-  const q = (document.getElementById("vessel-search")?.value || "").toLowerCase();
-  const ships = state.ships.filter(s => !q || (s.name||"").toLowerCase().includes(q)).slice(0,20);
-  const flights = state.flights.filter(f => !q || (f.callsign||"").toLowerCase().includes(q) || (f.country||"").toLowerCase().includes(q)).slice(0,20);
+// ─── VESSELS LIST ──────────────────────────────────────────
+function renderVessels() {
+  const q = (qs('#vsearch')?.value || '').toLowerCase();
 
-  document.getElementById("ships-list").innerHTML = ships.length
-    ? ships.map(s => vesselRow("ship", s)).join("")
-    : `<div class="loading-msg">No ships</div>`;
+  const ships = S.ships
+    .filter(s => !q || (s.name||'').toLowerCase().includes(q))
+    .slice(0, 25);
+  const flights = S.flights
+    .filter(f => !q || (f.callsign||'').toLowerCase().includes(q) || (f.country||'').toLowerCase().includes(q))
+    .slice(0, 25);
 
-  document.getElementById("flights-list").innerHTML = flights.length
-    ? flights.map(f => vesselRow("flight", f)).join("")
-    : `<div class="loading-msg">No aircraft</div>`;
+  qs('#vships').innerHTML = ships.length ? ships.map(s => vrow('ship', s)).join('') : '<div class="empty">No ships</div>';
+  qs('#vflights').innerHTML = flights.length ? flights.map(f => vrow('flight', f)).join('') : '<div class="empty">No aircraft</div>';
 }
 
-function vesselRow(type, v) {
-  const isS = type === "ship";
-  const name = isS ? (v.name || `MMSI-${v.mmsi}`) : (v.callsign || "UNKNOWN");
-  const sub  = isS ? shipTypeName(v.type) : `${v.country||"?"} · ${v.altitude?Math.round(v.altitude).toLocaleString()+"ft":"—"}`;
+function vrow(type, v) {
+  const isS = type === 'ship';
+  const name = isS ? (v.name || `MMSI-${v.mmsi}`) : (v.callsign || 'UNKNOWN');
+  const sub  = isS ? stype(v.type) : `${v.country||'?'} · ${v.altitude?v.altitude.toLocaleString()+'ft':'—'}`;
   const spd  = isS ? `${(v.speed||0).toFixed(1)} kn` : `${v.speed||0} kn`;
-  const hdg  = isS ? `${v.heading||0}°` : `${v.altitude?Math.round(v.altitude).toLocaleString()+"ft":"—"}`;
-  const isMil = isS ? (v.type>=35&&v.type<=37) : isMilitaryFlight(v.callsign, v.country);
-  const sc = (isS&&v.speed<1) ? "var(--amber)" : isMil ? "#ff7700" : "var(--green)";
-  return `<div class="vessel-item" onclick="focusVessel(${v.lat},${v.lon||v.lng})">
-    <div class="vessel-icon ${isS?"vi-ship":"vi-plane"}" style="${isMil?"border-color:rgba(255,119,0,0.4);background:rgba(255,119,0,0.1)":""}">${isS?"⚓":"✈"}</div>
-    <div class="vessel-info">
-      <div class="vessel-name" style="${isMil?"color:#ff9944":""}">${escHtml(name)}${isMil?" 🔶":""}</div>
-      <div class="vessel-sub">${escHtml(sub)}</div>
+  const hdg  = isS ? `${v.heading||0}°` : `${v.altitude?v.altitude.toLocaleString()+'ft':'—'}`;
+  const isMil = isS ? (v.type>=35&&v.type<=37) : milFlight(v.callsign);
+  const sc = (isS&&v.speed<1)?'#ffaa00':isMil?'#ff7700':'#00cc66';
+  const ico = isS ? (isMil ? 'vim' : 'vis') : (isMil ? 'vim' : 'vip');
+
+  return `<div class="vi" onclick="flyTo(${v.lat},${v.lon||v.lng})">
+    <div class="viico ${ico}">${isS?'⚓':'✈'}</div>
+    <div class="viinfo">
+      <div class="viname" style="${isMil?'color:#ff9944':''}">${esc(name)}${isMil?' 🔶':''}</div>
+      <div class="visub">${esc(sub)}</div>
     </div>
-    <div class="vessel-right">
+    <div class="viright">
       <div style="width:5px;height:5px;border-radius:50%;background:${sc};box-shadow:0 0 4px ${sc};margin-left:auto;margin-bottom:2px"></div>
-      <div class="vessel-speed">${spd}</div>
-      <div class="vessel-heading">${hdg}</div>
+      <div class="vispd">${spd}</div>
+      <div class="vihdg">${hdg}</div>
     </div>
   </div>`;
 }
 
-window.focusVessel = function(lat, lon) {
+window.flyTo = (lat, lon) => {
   if (lat && lon) map.flyTo([lat, lon], 7, { duration: 1.5 });
 };
 
-// ─── DETAIL PANEL ─────────────────────────────────────────────
-function showDetail(type, data) {
-  const panel = document.getElementById("detail-panel");
-  const content = document.getElementById("detail-content");
-  let html = "";
+// ─── DETAIL DRAWER ─────────────────────────────────────────
+function openDrawer(type, d) {
+  const el = qs('#drawer-content');
+  let h = '';
 
-  if (type === "ship") {
-    const isMil = data.type>=35&&data.type<=37;
-    html = `<div class="detail-title" style="color:${isMil?"#ff9944":"#0e9eff"}">⚓ ${escHtml(data.name||"Unknown")}${isMil?` <span style="font-size:9px;color:#ff6600;background:rgba(255,100,0,0.15);padding:1px 6px;border-radius:2px;margin-left:6px">WARSHIP</span>`:""}</div>
-    <div class="detail-grid">
-      <div class="detail-item"><div class="detail-key">MMSI</div><div class="detail-val">${data.mmsi}</div></div>
-      <div class="detail-item"><div class="detail-key">TYPE</div><div class="detail-val">${shipTypeName(data.type)}</div></div>
-      <div class="detail-item"><div class="detail-key">SPEED</div><div class="detail-val" style="color:${data.speed===0?"#ffaa00":"#00cc66"}">${(data.speed||0).toFixed(1)} kn</div></div>
-      <div class="detail-item"><div class="detail-key">HEADING</div><div class="detail-val">${data.heading||0}°</div></div>
-      <div class="detail-item"><div class="detail-key">POSITION</div><div class="detail-val">${(data.lat||0).toFixed(3)}, ${(data.lon||0).toFixed(3)}</div></div>
-      <div class="detail-item"><div class="detail-key">AIS</div><div class="detail-val" style="color:${data.speed===0?"#ffaa00":"#00cc66"}">${data.speed===0?"STOPPED":"ACTIVE"}</div></div>
+  if (type === 'ship') {
+    const isMil = d.type>=35&&d.type<=37;
+    const col = isMil ? '#0e9eff' : '#4488bb';
+    h = `<div class="dtitle" style="color:${col}">⚓ ${esc(d.name||'Unknown')}
+      ${isMil?`<span style="font-size:9px;padding:1px 6px;border-radius:2px;background:rgba(14,158,255,.15);color:#0e9eff">WARSHIP</span>`:''}</div>
+    <div class="dgrid">
+      <div><div class="dk">MMSI</div><div class="dv">${d.mmsi}</div></div>
+      <div><div class="dk">TYPE</div><div class="dv">${stype(d.type)}</div></div>
+      <div><div class="dk">SPEED</div><div class="dv" style="color:${d.speed===0?'#ffaa00':'#00cc66'}">${(d.speed||0).toFixed(1)} kn</div></div>
+      <div><div class="dk">HEADING</div><div class="dv">${d.heading||0}°</div></div>
+      <div><div class="dk">LAT/LON</div><div class="dv">${(d.lat||0).toFixed(3)}, ${(d.lon||0).toFixed(3)}</div></div>
+      <div><div class="dk">AIS</div><div class="dv" style="color:${d.speed===0?'#ffaa00':'#00cc66'}">${d.speed===0?'STOPPED':'ACTIVE'}</div></div>
     </div>`;
-  } else if (type === "flight") {
-    const isMil = isMilitaryFlight(data.callsign, data.country);
-    html = `<div class="detail-title" style="color:${isMil?"#ff9944":"#00d4aa"}">✈ ${escHtml(data.callsign||"UNKNOWN")}${isMil?` <span style="font-size:9px;color:#ff6600;background:rgba(255,100,0,0.15);padding:1px 6px;border-radius:2px;margin-left:6px">MILITARY</span>`:""}</div>
-    <div class="detail-grid">
-      <div class="detail-item"><div class="detail-key">ICAO24</div><div class="detail-val">${data.icao24}</div></div>
-      <div class="detail-item"><div class="detail-key">COUNTRY</div><div class="detail-val">${data.country||"?"}</div></div>
-      <div class="detail-item"><div class="detail-key">ALTITUDE</div><div class="detail-val">${data.altitude?Math.round(data.altitude).toLocaleString()+" ft":"—"}</div></div>
-      <div class="detail-item"><div class="detail-key">SPEED</div><div class="detail-val">${data.speed||0} kn</div></div>
-      <div class="detail-item"><div class="detail-key">HEADING</div><div class="detail-val">${data.heading||0}°</div></div>
+  } else if (type === 'flight') {
+    const isMil = milFlight(d.callsign);
+    const col = isMil ? '#ff9944' : '#00d4aa';
+    h = `<div class="dtitle" style="color:${col}">✈ ${esc(d.callsign||'UNKNOWN')}
+      ${isMil?`<span style="font-size:9px;padding:1px 6px;border-radius:2px;background:rgba(255,119,0,.15);color:#ff7700">MILITARY</span>`:''}</div>
+    <div class="dgrid">
+      <div><div class="dk">ICAO24</div><div class="dv">${d.icao24}</div></div>
+      <div><div class="dk">COUNTRY</div><div class="dv">${d.country||'?'}</div></div>
+      <div><div class="dk">ALTITUDE</div><div class="dv">${d.altitude?d.altitude.toLocaleString()+' ft':'—'}</div></div>
+      <div><div class="dk">SPEED</div><div class="dv">${d.speed||0} kn</div></div>
+      <div><div class="dk">HEADING</div><div class="dv">${d.heading||0}°</div></div>
     </div>`;
-  } else if (type === "event") {
-    html = `<div class="detail-title" style="color:#ff5533">⚠ ${escHtml(data.title||"Event")}</div>
-    <div class="detail-grid">
-      <div class="detail-item"><div class="detail-key">SEVERITY</div><div class="detail-val" style="color:${data.severity==="critical"?"#ff2222":data.severity==="high"?"#ff5500":"#ffaa00"}">${(data.severity||"?").toUpperCase()}</div></div>
-      <div class="detail-item"><div class="detail-key">TYPE</div><div class="detail-val">${(data.type||"?").toUpperCase()}</div></div>
-      <div class="detail-item"><div class="detail-key">REGION</div><div class="detail-val">${(data.locationName||"?").toUpperCase()}</div></div>
-      <div class="detail-item"><div class="detail-key">SCORE</div><div class="detail-val">${data.relevanceScore||0}/100</div></div>
-      <div class="detail-item"><div class="detail-key">SHIPS NEAR</div><div class="detail-val" style="color:#0e9eff">${data.nearbyShips||0}</div></div>
-      <div class="detail-item"><div class="detail-key">AIRCRAFT</div><div class="detail-val" style="color:#00d4aa">${data.nearbyFlights||0}</div></div>
+  } else if (type === 'event') {
+    const sc = d.severity==='critical'?'#ff2222':d.severity==='high'?'#ff5500':'#ffaa00';
+    h = `<div class="dtitle" style="color:#ff5533">⚠ ${esc(d.title||'Event')}</div>
+    <div class="dgrid">
+      <div><div class="dk">SEVERITY</div><div class="dv" style="color:${sc}">${(d.severity||'?').toUpperCase()}</div></div>
+      <div><div class="dk">TYPE</div><div class="dv">${(d.type||'?').toUpperCase()}</div></div>
+      <div><div class="dk">REGION</div><div class="dv">${(d.locationName||'?').toUpperCase()}</div></div>
+      <div><div class="dk">SCORE</div><div class="dv">${d.relevanceScore||0}/100</div></div>
+      <div><div class="dk">SHIPS NEAR</div><div class="dv" style="color:#0e9eff">${d.nearbyShips||0}</div></div>
+      <div><div class="dk">AIRCRAFT</div><div class="dv" style="color:#00d4aa">${d.nearbyFlights||0}</div></div>
     </div>
-    ${data.url?`<div style="margin-top:8px;font-size:10px"><a href="${data.url}" target="_blank" style="color:#0e9eff">View source ↗</a></div>`:""}`;
+    ${d.url?`<div style="margin-top:8px;font-size:10px"><a href="${d.url}" target="_blank" style="color:#0e9eff">View source ↗</a></div>`:''}`;
   }
 
-  content.innerHTML = html;
-  panel.classList.remove("hidden");
+  el.innerHTML = h;
+  qs('#drawer').classList.remove('hidden');
 }
 
-document.getElementById("detail-close")?.addEventListener("click", () => {
-  document.getElementById("detail-panel").classList.add("hidden");
-});
+qs('#drawer-close')?.addEventListener('click', () => qs('#drawer').classList.add('hidden'));
 
-// ─── AI INTEL ─────────────────────────────────────────────────
-function buildIntelCards() {
-  const container = document.getElementById("intel-content");
-  const critical = state.events.filter(e => e.severity === "critical").slice(0,2);
-  const high = state.events.filter(e => e.severity === "high").slice(0,3);
-  const aisOff = state.ships.filter(s => s.speed === 0).length;
-  const milShips = state.ships.filter(s => s.type>=35&&s.type<=37).length;
-  const milFlights = state.flights.filter(f => isMilitaryFlight(f.callsign)).length;
+// ─── AI INTEL ──────────────────────────────────────────────
+function buildIntel() {
+  const el = qs('#intel');
+  const crit   = S.events.filter(e => e.severity==='critical').slice(0,3);
+  const high   = S.events.filter(e => e.severity==='high').slice(0,3);
+  const aisOff = S.ships.filter(s => s.speed===0).length;
+  const milS   = S.ships.filter(s => s.type>=35&&s.type<=37).length;
+  const milF   = S.flights.filter(f => milFlight(f.callsign)).length;
+  const critZones = ZONES.filter(z=>z.i==='critical').length;
 
-  let html = `<div class="intel-divider">Global Overview</div>
-  <div class="intel-card">
-    <div class="intel-card-title">Situation Summary</div>
-    <div class="intel-card-body">
-      Tracking <strong style="color:#0e9eff">${state.ships.length.toLocaleString()}</strong> vessels (${milShips} warships) 
-      and <strong style="color:#00d4aa">${state.flights.length.toLocaleString()}</strong> aircraft (${milFlights} military).
-      <strong style="color:#ff5533"> ${state.events.length}</strong> active events across 
-      ${CONFLICT_ZONES.filter(z=>z.intensity==="critical").length} critical zones.
-      ${aisOff>0?`<br/><span style="color:#ffaa00">⚠ ${aisOff} vessels with AIS disabled.</span>`:""}
+  let h = `<div class="idiv">Global Situation</div>
+  <div class="icard">
+    <div class="icard-t">Real-Time Overview</div>
+    <div class="icard-b">
+      Tracking <b style="color:#0e9eff">${S.ships.length.toLocaleString()}</b> vessels 
+      (${milS} warships) and <b style="color:#00d4aa">${S.flights.length.toLocaleString()}</b> aircraft 
+      (${milF} military identified). 
+      <b style="color:#ff5533">${S.events.length}</b> active events across 
+      <b>${critZones}</b> critical conflict zones.
+      ${aisOff>0?`<br/><span style="color:#ffaa00">⚠ ${aisOff} vessels showing AIS blackout.</span>`:''}
     </div>
   </div>`;
 
-  if (critical.length) {
-    html += `<div class="intel-divider">Critical Alerts</div>`;
-    critical.forEach(ev => {
-      const conf = Math.min(92, 45 + (ev.relevanceScore||0)*0.5 + (ev.nearbyShips||0)*5);
-      html += intelCard(ev, conf, "cf-low");
-    });
+  if (crit.length) {
+    h += `<div class="idiv">Critical Alerts</div>`;
+    crit.forEach(ev => h += icard(ev, Math.min(92,45+(ev.relevanceScore||0)*.5+(ev.nearbyShips||0)*5), 'ic-lo'));
   }
   if (high.length) {
-    html += `<div class="intel-divider">High Priority</div>`;
-    high.forEach(ev => {
-      const conf = Math.min(82, 38 + (ev.relevanceScore||0)*0.4);
-      html += intelCard(ev, conf, "cf-medium");
-    });
+    h += `<div class="idiv">High Priority</div>`;
+    high.forEach(ev => h += icard(ev, Math.min(80,38+(ev.relevanceScore||0)*.4), 'ic-md'));
   }
-  if (aisOff > 0) {
-    html += `<div class="intel-divider">Anomalies</div>
-    <div class="intel-card">
-      <div class="intel-card-title">AIS Blackout – ${aisOff} vessels</div>
-      <div class="intel-card-body">${aisOff} vessels have disabled transponders. Possible causes: jamming, pre-op stealth, or technical failure.</div>
-      <div class="intel-conf"><span class="conf-label">Concern</span>
-        <div class="conf-bar"><div class="conf-fill cf-medium" style="width:55%"></div></div>
-        <span class="conf-pct">55%</span></div>
+  if (aisOff>0) {
+    h += `<div class="idiv">Anomalies</div>
+    <div class="icard">
+      <div class="icard-t">AIS Blackout — ${aisOff} vessels</div>
+      <div class="icard-b">Vessels with disabled AIS transponders. Possible causes: GPS jamming, deliberate stealth, pre-operation positioning, or technical failure.</div>
+      <div class="iconf"><span class="iclabel">Concern</span><div class="icbar"><div class="icfill ic-md" style="width:55%"></div></div><span class="icpct">55%</span></div>
     </div>`;
   }
-  container.innerHTML = html || `<div class="loading-msg">Insufficient data for analysis</div>`;
+  if (milF > 0) {
+    h += `<div class="idiv">Military Aviation</div>
+    <div class="icard">
+      <div class="icard-t">${milF} Military Aircraft Active</div>
+      <div class="icard-b">Identified via callsign patterns. Elevated activity near conflict zones may indicate ISR missions, force posturing, or active operations.</div>
+      <div class="iconf"><span class="iclabel">Confidence</span><div class="icbar"><div class="icfill ic-hi" style="width:72%"></div></div><span class="icpct">72%</span></div>
+    </div>`;
+  }
+
+  el.innerHTML = h || '<div class="empty">Insufficient data for analysis</div>';
 }
 
-function intelCard(ev, conf, cls) {
-  return `<div class="intel-card">
-    <div class="intel-card-title">${(ev.locationName||"?").toUpperCase()} – ${(ev.type||"EVENT").toUpperCase()}</div>
-    <div class="intel-card-body">${ev.nearbyShips||0} vessels and ${ev.nearbyFlights||0} aircraft nearby.
-    ${ev.count>1?`${ev.count} sources corroborating.`:"Single source."} Severity: ${ev.severity}.</div>
-    <div class="intel-conf"><span class="conf-label">Confidence</span>
-      <div class="conf-bar"><div class="conf-fill ${cls}" style="width:${Math.round(conf)}%"></div></div>
-      <span class="conf-pct">${Math.round(conf)}%</span></div>
+function icard(ev, conf, cls) {
+  return `<div class="icard">
+    <div class="icard-t">${(ev.locationName||'?').toUpperCase()} — ${(ev.type||'EVENT').toUpperCase()}</div>
+    <div class="icard-b">${ev.nearbyShips||0} vessels and ${ev.nearbyFlights||0} aircraft nearby. ${ev.count>1?`${ev.count} sources corroborating.`:'Single source.'} Severity: ${ev.severity}.</div>
+    <div class="iconf"><span class="iclabel">Confidence</span><div class="icbar"><div class="icfill ${cls}" style="width:${Math.round(conf)}%"></div></div><span class="icpct">${Math.round(conf)}%</span></div>
   </div>`;
 }
 
-// ─── COMMUNITY ────────────────────────────────────────────────
+// ─── COMMUNITY ─────────────────────────────────────────────
 const DEMO_POSTS = [
-  { id:1, text:"RC-135 SIGINT over eastern Ukraine for 4h+ – unusual duration", time: Date.now()-12*60000, votes:23 },
-  { id:2, text:"MT Pacific Glory AIS reappeared 40nm north of last known position", time: Date.now()-28*60000, votes:15 },
-  { id:3, text:"Multiple helicopters south of Kherson on Flightradar – no callsigns", time: Date.now()-45*60000, votes:31 },
-  { id:4, text:"Drone strike on infrastructure reported – location still unconfirmed by second source", time: Date.now()-67*60000, votes:8 },
+  { id:1, t:'RC-135 SIGINT aircraft over eastern Ukraine for 4h+ — unusual loiter duration',      ts:Date.now()-12*60000, v:23 },
+  { id:2, t:'MT Pacific Glory AIS reappeared 40nm north of last position near Hormuz',            ts:Date.now()-28*60000, v:15 },
+  { id:3, t:'Multiple helicopters south of Kherson on FlightRadar24 — callsigns not displayed',   ts:Date.now()-45*60000, v:31 },
+  { id:4, t:'Drone strike on infrastructure facility reported — second source not yet confirmed',  ts:Date.now()-67*60000, v:8  },
+  { id:5, t:'Unusual carrier group movement in Eastern Mediterranean — USS Gerald Ford HDG 092°', ts:Date.now()-90*60000, v:44 },
 ];
-state.communityPosts = [...DEMO_POSTS];
+S.posts = [...DEMO_POSTS];
 
 function renderCommunity() {
-  const feed = document.getElementById("community-feed");
-  if (!state.communityPosts.length) { feed.innerHTML=`<div class="loading-msg">No posts yet</div>`; return; }
-  feed.innerHTML = state.communityPosts.map(p => `
-    <div class="community-post">
-      <div class="cp-header"><span class="cp-anon">Anon#${String(p.id).padStart(4,"0")}</span><span class="cp-time">${formatTimeAgo(p.time)}</span></div>
-      <div class="cp-text">${escHtml(p.text)}</div>
-      <div class="cp-actions">
-        <button class="cp-action" onclick="upvote(${p.id})">▲ ${p.votes}</button>
-        <button class="cp-action">↩ Reply</button>
-      </div>
-    </div>`).join("");
+  const el = qs('#cfeed');
+  if (!S.posts.length) { el.innerHTML = '<div class="empty">No posts yet</div>'; return; }
+  el.innerHTML = S.posts.map(p => `
+    <div class="cpost">
+      <div class="cphdr"><span class="cpanon">Anon#${String(p.id).padStart(4,'0')}</span><span class="cptime">${ago(p.ts)}</span></div>
+      <div class="cptext">${esc(p.t)}</div>
+      <div class="cpact"><button class="cpbtn" onclick="upvote(${p.id})">▲ ${p.v}</button><button class="cpbtn">↩ Reply</button></div>
+    </div>`).join('');
 }
 
-window.upvote = function(id) {
-  const p = state.communityPosts.find(x => x.id===id);
-  if (p) { p.votes++; renderCommunity(); }
+window.upvote = id => {
+  const p = S.posts.find(x => x.id===id);
+  if (p) { p.v++; renderCommunity(); }
 };
 
-document.getElementById("post-btn")?.addEventListener("click", () => {
-  const inp = document.getElementById("post-input");
-  const text = inp.value.trim();
-  if (!text||text.length<10) return;
-  state.communityPosts.unshift({ id: Date.now(), text, time: Date.now(), votes: 0 });
-  inp.value = "";
-  document.getElementById("post-chars").textContent = "280";
+qs('#pbtn')?.addEventListener('click', () => {
+  const inp = qs('#pinput');
+  const t = inp.value.trim();
+  if (!t || t.length < 10) return;
+  S.posts.unshift({ id: Date.now(), t, ts: Date.now(), v: 0 });
+  inp.value = ''; qs('#pchars').textContent = '280';
   renderCommunity();
 });
-
-document.getElementById("post-input")?.addEventListener("input", function() {
-  document.getElementById("post-chars").textContent = 280 - this.value.length;
+qs('#pinput')?.addEventListener('input', function() {
+  qs('#pchars').textContent = 280 - this.value.length;
 });
 
-// ─── TABS / FILTERS / TOGGLES ─────────────────────────────────
-document.querySelectorAll(".tab").forEach(tab => {
-  tab.addEventListener("click", () => {
-    const id = tab.dataset.tab;
-    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
-    tab.classList.add("active");
-    document.getElementById(`panel-${id}`)?.classList.add("active");
-    if (id==="community") renderCommunity();
-  });
+// ─── TABS ──────────────────────────────────────────────────
+qsa('.tab').forEach(btn => btn.addEventListener('click', () => {
+  const id = btn.dataset.tab;
+  qsa('.tab').forEach(t => t.classList.remove('active'));
+  qsa('.panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  qs(`#panel-${id}`)?.classList.add('active');
+  if (id === 'community') renderCommunity();
+}));
+
+// Feed trust filter
+qsa('.ff').forEach(btn => btn.addEventListener('click', () => {
+  qsa('.ff').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  S.trust = btn.dataset.trust;
+  renderFeed();
+  if (S.translated) translateFeed();
+}));
+
+// Layer toggles
+qsa('.h-btn[data-layer]').forEach(btn => btn.addEventListener('click', () => {
+  const l = btn.dataset.layer;
+  btn.classList.toggle('active');
+  S.layers[l] = btn.classList.contains('active');
+  if (S.layers[l]) map.addLayer(GL[l]);
+  else map.removeLayer(GL[l]);
+}));
+
+qs('#btn-zones')?.addEventListener('click', function() {
+  this.classList.toggle('active');
+  S.layers.zones = this.classList.contains('active');
+  if (S.layers.zones) map.addLayer(GL.zones);
+  else map.removeLayer(GL.zones);
 });
 
-document.querySelectorAll(".feed-filter").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".feed-filter").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    state.currentTrust = btn.dataset.trust;
-    renderFeed();
-  });
-});
+qs('#vsearch')?.addEventListener('input', renderVessels);
 
-document.querySelectorAll(".filter-toggle").forEach(btn => {
-  btn.addEventListener("click", () => {
-    const layer = btn.dataset.layer;
-    btn.classList.toggle("active");
-    state.layers[layer] = btn.classList.contains("active");
-    const lm = { ships: shipLayer, flights: flightLayer, events: eventLayer };
-    if (state.layers[layer]) map.addLayer(lm[layer]);
-    else map.removeLayer(lm[layer]);
-  });
-});
-
-// Zones toggle
-document.getElementById("toggle-zones")?.addEventListener("click", function() {
-  this.classList.toggle("active");
-  state.layers.zones = this.classList.contains("active");
-  if (state.layers.zones) map.addLayer(zoneLayer);
-  else map.removeLayer(zoneLayer);
-});
-
-document.getElementById("vessel-search")?.addEventListener("input", renderVesselList);
-
-// ─── STATUS ───────────────────────────────────────────────────
-function setStatus(s, text) {
-  const dot = document.getElementById("status-dot");
-  const txt = document.getElementById("status-text");
-  if (dot) dot.className = `status-indicator ${s}`;
-  if (txt) txt.textContent = text;
+// ─── STATUS ────────────────────────────────────────────────
+function setStatus(state, msg) {
+  const d = qs('#sdot'), t = qs('#stxt');
+  if (d) d.className = `sdot ${state}`;
+  if (t) t.textContent = msg;
 }
-function updateLastUpdated() {
-  const el = document.getElementById("last-update");
-  if (el) el.textContent = `Updated: ${new Date().toLocaleTimeString("en-US")}`;
+function setUpdated() {
+  const e = qs('#lupd');
+  if (e) e.textContent = `Updated ${new Date().toLocaleTimeString('en-US')}`;
 }
+
+// Online counter simulation
 setInterval(() => {
-  state.onlineCount += Math.floor(Math.random()*7)-3;
-  state.onlineCount = Math.max(20, Math.min(300, state.onlineCount));
-  const el = document.getElementById("online-count");
-  if (el) el.textContent = state.onlineCount;
-}, 8000);
+  S.online += Math.floor(Math.random()*7)-3;
+  S.online = Math.max(20, Math.min(350, S.online));
+  const e = qs('#online');
+  if (e) e.textContent = S.online;
+}, 9000);
 
-// ─── API ──────────────────────────────────────────────────────
-async function apiFetch(endpoint, fallback=[]) {
+// ─── API ───────────────────────────────────────────────────
+async function get(path, fallback=[]) {
   try {
-    const res = await fetch(`${API_URL}${endpoint}`, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } catch(err) {
-    console.warn(`[API] ${endpoint}:`, err.message);
+    const r = await fetch(API + path, { signal: AbortSignal.timeout(9000) });
+    if (!r.ok) throw new Error(r.status);
+    return await r.json();
+  } catch(e) {
+    console.warn('[GET]', path, e.message);
     return fallback;
   }
 }
 
-// ─── HELPERS ──────────────────────────────────────────────────
-function formatTimeAgo(ts) {
-  if (!ts) return "?";
+// ─── HELPERS ───────────────────────────────────────────────
+function ago(ts) {
+  if (!ts) return '?';
   const m = Math.floor((Date.now()-ts)/60000);
-  if (m<1) return "just now";
-  if (m<60) return `${m}m ago`;
-  if (m<1440) return `${Math.floor(m/60)}h ago`;
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  if (m < 1440) return `${Math.floor(m/60)}h ago`;
   return `${Math.floor(m/1440)}d ago`;
 }
-function extractTags(text) {
-  const lower = text.toLowerCase();
-  const map = { "ukraine":"🇺🇦 Ukraine","russia":"🇷🇺 Russia","israel":"🇮🇱 Israel",
-    "gaza":"Gaza","iran":"Iran","black sea":"Black Sea","red sea":"Red Sea",
-    "missile":"Missile","drone":"Drone","airstrike":"Airstrike","explosion":"Explosion",
-    "nato":"NATO","hormuz":"Hormuz","syria":"Syria","taiwan":"Taiwan",
-    "china":"China","houthi":"Houthi","lebanon":"Lebanon","north korea":"N. Korea" };
-  return Object.entries(map).filter(([k])=>lower.includes(k)).map(([,v])=>v).slice(0,4);
-}
-function escHtml(s) {
-  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+function extractTags(txt) {
+  const lo = txt.toLowerCase();
+  const MAP = {
+    'ukraine':'🇺🇦 Ukraine','russia':'🇷🇺 Russia','israel':'🇮🇱 Israel',
+    'gaza':'Gaza','iran':'Iran','black sea':'Black Sea','red sea':'Red Sea',
+    'missile':'Missile','drone':'Drone','airstrike':'Airstrike',
+    'explosion':'Explosion','nato':'NATO','hormuz':'Hormuz',
+    'syria':'Syria','taiwan':'Taiwan','china':'China',
+    'houthi':'Houthi','lebanon':'Lebanon','north korea':'N.Korea',
+    'myanmar':'Myanmar','sudan':'Sudan','ethiopia':'Ethiopia',
+  };
+  return Object.entries(MAP).filter(([k])=>lo.includes(k)).map(([,v])=>v).slice(0,4);
 }
 
-// ─── INIT ─────────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+const qs  = s => document.querySelector(s);
+const qsa = s => document.querySelectorAll(s);
+
+// ─── INIT ──────────────────────────────────────────────────
 async function init() {
-  setStatus("loading", "Connecting...");
+  setStatus('loading', 'Connecting...');
   renderCommunity();
-  initTranslateButton();
+  initTranslate();
 
-  const stats = await apiFetch("/", null);
-  setStatus(stats ? "online" : "error", stats ? "Live" : "Backend offline – demo mode");
+  const ping = await get('/', null);
+  setStatus(ping ? 'live' : 'err', ping ? 'Live' : 'Demo mode — backend offline');
 
   await Promise.all([loadShips(), loadFlights(), loadEvents(), loadNews()]);
-  updateLastUpdated();
+  setUpdated();
 
-  setInterval(async () => { await loadShips(); updateLastUpdated(); }, REFRESH.vessels);
-  setInterval(async () => { await loadFlights(); updateLastUpdated(); }, REFRESH.vessels + 5000);
-  setInterval(async () => { await loadEvents(); }, REFRESH.events);
-  setInterval(async () => { await loadNews(); if (translate.active) activateTranslation(); }, REFRESH.feed);
+  setInterval(async () => { await loadShips();   setUpdated(); }, TICK.vessels);
+  setInterval(async () => { await loadFlights();             }, TICK.vessels + 7000);
+  setInterval(async () => { await loadEvents();              }, TICK.events);
+  setInterval(async () => { await loadNews();                }, TICK.news);
 }
+
 init();
